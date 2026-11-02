@@ -1,0 +1,1935 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PDF 필기장</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=Gowun+Dodum&display=swap">
+<style>
+/* Layout: one app, three arrangements. PC/tablet: everything in the top bar, page thumbnails left, memo right.
+   Phone: slim top bar, tool dock at the bottom, thumbnails and memo as sheets over the page. */
+:root {
+  --bg: #e7ebf0;
+  --panel: #fbfcfd;
+  --fg: #1b2330;
+  --muted: #5b6676;
+  --line: #d3d9e1;
+  --accent: #2f5bd3;
+  --accent-soft: #dfe7fb;
+  --danger: #c62828;
+  --memo: #fff4c2;
+  --memo-fg: #3a3215;
+  --memo-line: #e9d98a;
+  --shadow: 0 1px 3px rgba(20, 30, 50, .18), 0 6px 18px rgba(20, 30, 50, .08);
+  --ui: "IBM Plex Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", system-ui, sans-serif;
+  --hand: "Gowun Dodum", "IBM Plex Sans KR", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161c; --panel: #1b2129; --fg: #e5e9ef; --muted: #98a2b1; --line: #2d3540;
+    --accent: #86a2ff; --accent-soft: #263255; --danger: #ff7b7b; --memo: #2b2818; --memo-fg: #f1e6b8; --memo-line: #4a4426;
+    --shadow: 0 1px 3px rgba(0, 0, 0, .5), 0 6px 18px rgba(0, 0, 0, .3);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12161c; --panel: #1b2129; --fg: #e5e9ef; --muted: #98a2b1; --line: #2d3540;
+  --accent: #86a2ff; --accent-soft: #263255; --danger: #ff7b7b; --memo: #2b2818; --memo-fg: #f1e6b8; --memo-line: #4a4426;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .5), 0 6px 18px rgba(0, 0, 0, .3);
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--ui); overflow: hidden; }
+.app { height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+
+/* ---------- bars ---------- */
+.bar, .dock {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  padding-block: 6px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background: var(--panel); position: relative; z-index: 9;
+}
+.bar { border-bottom: 1px solid var(--line); }
+.dock { border-top: 1px solid var(--line); flex-direction: column; align-items: stretch; gap: 6px; padding-bottom: calc(6px + env(safe-area-inset-bottom, 0px)); }
+.dock-row { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+.grp { display: flex; align-items: center; gap: 2px; }
+.sep { width: 1px; height: 32px; background: var(--line); flex: none; }
+.spacer { flex: 1; }
+.tb {
+  font: inherit; color: var(--fg); background: transparent; border: 0; border-radius: 10px;
+  min-width: 48px; height: 48px; padding: 0 7px; display: inline-flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px; cursor: pointer; font-size: 11px; line-height: 1.1;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; position: relative; white-space: nowrap;
+}
+.tb svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tb:hover { background: var(--accent-soft); }
+.tb[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+.tb:disabled { opacity: .35; cursor: default; background: transparent; }
+.tb.primary { background: var(--accent); color: var(--panel); flex-direction: row; gap: 6px; padding: 0 14px; font-size: 14px; font-weight: 500; height: 40px; }
+.tb.ghost { flex-direction: row; gap: 6px; padding: 0 12px; font-size: 14px; height: 40px; border: 1px solid var(--line); }
+.tb.primary svg, .tb.ghost svg { width: 18px; height: 18px; }
+.tb.danger { color: var(--danger); }
+.tb:focus-visible, .sw:focus-visible, .memo-item:focus-visible, .pill:focus-visible, .thumb:focus-visible, .opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.style-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.swatches { display: flex; gap: 6px; align-items: center; }
+.sw { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line); cursor: pointer; padding: 0; touch-action: manipulation; flex: none; }
+.sw[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--accent); }
+.kinds { display: flex; gap: 2px; }
+.kinds .tb { min-width: 40px; height: 40px; }
+.width { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.width input { width: 96px; accent-color: var(--accent); }
+.zoom-label { font-size: 13px; min-width: 46px; text-align: center; font-variant-numeric: tabular-nums; color: var(--muted); }
+.fname { font-size: 13px; color: var(--muted); max-width: 22ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ---------- main area ---------- */
+.main { flex: 1; min-height: 0; display: flex; position: relative; }
+.viewer { flex: 1; min-width: 0; overflow: auto; position: relative; touch-action: none; user-select: none; -webkit-user-select: none; overscroll-behavior: contain; outline: none; }
+.pages { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 16px 16px 40px; box-sizing: border-box; width: max-content; min-width: 100%; }
+.page { position: relative; background: #fff; box-shadow: var(--shadow); flex: none; }
+.page canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.page .ink { z-index: 1; }
+.hits { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.hit { position: absolute; background: rgba(255, 176, 0, .35); border-radius: 2px; }
+.hit.cur { background: rgba(255, 110, 0, .45); outline: 2px solid #ff6a00; }
+.pnum { position: absolute; left: 50%; bottom: -13px; transform: translate(-50%, 50%); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; z-index: 2; }
+.memo-tab { position: absolute; top: 0; right: 14px; z-index: 3; width: 30px; height: 36px; border: 0; padding: 0; background: #ffd84d; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 78%, 0 100%); cursor: pointer; touch-action: manipulation; }
+.text-editor {
+  position: absolute; z-index: 5; box-sizing: content-box; border: 1.5px dashed #2f5bd3; background: rgba(255, 255, 255, .85);
+  padding: 0; margin: 0; resize: none; overflow: hidden; outline: none; white-space: pre; font-family: var(--ui); font-weight: 500;
+  line-height: 1.35; user-select: text; -webkit-user-select: text; touch-action: auto; min-width: 40px;
+}
+.hud { position: absolute; left: 16px; bottom: 14px; z-index: 4; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-variant-numeric: tabular-nums; box-shadow: var(--shadow); pointer-events: none; }
+
+/* thumbnails */
+.thumbs { width: 212px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); min-height: 0; z-index: 7; }
+.thumbs-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 4px 14px; font-size: 13px; color: var(--muted); }
+.page-ops { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 4px 8px 8px; border-bottom: 1px solid var(--line); }
+.page-ops .tb { min-width: 0; height: 52px; font-size: 10.5px; }
+.thumb-list { flex: 1; min-height: 0; overflow: auto; padding: 12px 18px 20px; display: grid; grid-template-columns: 1fr; gap: 14px; align-content: start; }
+.thumb { font: inherit; background: transparent; border: 0; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; position: relative; }
+.thumb canvas { width: 100%; background: #fff; box-shadow: 0 0 0 1px var(--line); display: block; }
+.thumb[aria-current="true"] canvas { box-shadow: 0 0 0 3px var(--accent); }
+.thumb[aria-current="true"] { color: var(--accent); font-weight: 700; }
+.thumb .dot { position: absolute; top: -3px; right: -3px; width: 12px; height: 12px; border-radius: 50%; background: #ffd84d; box-shadow: 0 0 0 2px var(--panel); }
+
+/* memo */
+.memo { width: 320px; flex: none; display: flex; flex-direction: column; background: var(--panel); border-left: 1px solid var(--line); min-height: 0; z-index: 7; }
+.memo-head { display: flex; align-items: center; gap: 6px; padding: 10px 12px 8px 16px; }
+.memo-head h2 { font-size: 16px; font-weight: 700; margin: 0; flex: 1; font-variant-numeric: tabular-nums; text-align: center; }
+.pill { font: inherit; font-size: 18px; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; touch-action: manipulation; flex: none; }
+.pill:disabled { opacity: .35; }
+.note { margin: 0 12px; background: var(--memo); color: var(--memo-fg); border-radius: 4px 4px 4px 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 150px; flex: 1.2; }
+.note textarea {
+  flex: 1; resize: none; border: 0; outline: 0; background: transparent; color: inherit; box-sizing: border-box; min-height: 90px;
+  font-family: var(--hand); font-size: 17px; line-height: 30px; padding: 6px 14px 14px;
+  background-image: linear-gradient(transparent 29px, var(--memo-line) 29px, var(--memo-line) 30px);
+  background-size: 100% 30px; background-attachment: local; background-position: 0 6px;
+}
+.note textarea::placeholder { color: var(--memo-fg); opacity: .5; }
+.note-meta { font-size: 12px; padding: 4px 14px 8px; opacity: .7; display: flex; justify-content: space-between; }
+.memo-list-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; font-size: 13px; color: var(--muted); }
+.memo-list { flex: 1; min-height: 60px; overflow: auto; padding: 0 8px 12px; display: flex; flex-direction: column; gap: 2px; }
+.memo-item { font: inherit; text-align: left; border: 0; background: transparent; color: var(--fg); border-radius: 8px; padding: 8px 10px; display: grid; grid-template-columns: 44px 1fr; gap: 8px; cursor: pointer; align-items: baseline; }
+.memo-item:hover, .memo-item[aria-current="true"] { background: var(--accent-soft); }
+.memo-item b { font-size: 13px; font-variant-numeric: tabular-nums; color: var(--accent); }
+.memo-item span { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.memo-empty { font-size: 13px; color: var(--muted); padding: 8px 10px; line-height: 1.6; }
+.link { font: inherit; font-size: 13px; color: var(--accent); background: none; border: 0; cursor: pointer; padding: 4px; }
+
+/* search */
+.searchbar { position: absolute; top: 10px; right: 16px; z-index: 8; display: flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px 4px 4px 12px; box-shadow: var(--shadow); max-width: calc(100% - 32px); box-sizing: border-box; }
+.searchbar input { font: inherit; font-size: 15px; border: 0; outline: 0; background: transparent; color: var(--fg); width: 200px; min-width: 0; flex: 1; }
+.searchbar .count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 52px; text-align: right; }
+.searchbar .tb { min-width: 40px; height: 40px; }
+
+/* popover */
+.pop { position: absolute; top: 6px; right: 16px; z-index: 40; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow); padding: 12px; width: 260px; max-width: calc(100% - 32px); box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; }
+.pop h3 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 500; letter-spacing: .03em; }
+.seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+.opt { font: inherit; font-size: 13px; padding: 9px 4px; border-radius: 9px; border: 1px solid var(--line); background: transparent; color: var(--fg); cursor: pointer; }
+.opt[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+.pop .hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin: 0; }
+.pop .row { font: inherit; font-size: 14px; text-align: left; padding: 10px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--fg); cursor: pointer; }
+.pop .row:hover { background: var(--accent-soft); }
+
+.drop { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 16px; background: color-mix(in srgb, var(--accent-soft) 80%, transparent); display: grid; place-items: center; font-size: 18px; color: var(--accent); z-index: 20; pointer-events: none; }
+.busy { position: absolute; inset: 0; display: grid; place-items: center; z-index: 30; background: color-mix(in srgb, var(--bg) 60%, transparent); }
+.busy div { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 20px; box-shadow: var(--shadow); font-size: 14px; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translate(-50%, 20px); opacity: 0; background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: 14px; z-index: 50; transition: opacity .2s, transform .2s; max-width: calc(100% - 32px); box-sizing: border-box; pointer-events: none; text-align: center; }
+.toast.on { opacity: 1; transform: translate(-50%, 0); }
+
+/* view modes */
+.stage { flex: 1; min-width: 0; position: relative; display: flex; }
+.row { display: flex; gap: 14px; align-items: flex-start; flex: none; }
+.pages.paged { min-height: 100%; justify-content: center; padding-left: 64px; padding-right: 64px; }
+.m-phone .pages.paged { padding-left: 16px; padding-right: 16px; }
+.pages.tone-sepia .page canvas.pdf { filter: sepia(.5) saturate(1.1) brightness(.97); }
+.pages.tone-night .page { background: #121212; }
+.pages.tone-night .page canvas { filter: invert(.9) hue-rotate(180deg); }
+.pager { position: absolute; top: 50%; transform: translateY(-50%); z-index: 6; width: 44px; height: 72px; border: 1px solid var(--line); background: color-mix(in srgb, var(--panel) 85%, transparent); color: var(--fg); border-radius: 12px; font: inherit; font-size: 26px; cursor: pointer; box-shadow: var(--shadow); touch-action: manipulation; }
+#pagerPrev { left: 10px; } #pagerNext { right: 10px; }
+
+/* sidebar tabs */
+.side-tabs { display: grid; grid-template-columns: repeat(4, 1fr); border-bottom: 1px solid var(--line); flex: none; }
+.side-tab { font: inherit; font-size: 12.5px; padding: 11px 2px 9px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: var(--muted); cursor: pointer; touch-action: manipulation; }
+.side-tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+.side-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.side-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.jump { display: flex; align-items: center; gap: 6px; padding: 8px 12px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); flex: none; }
+.jump input { width: 56px; font: inherit; font-size: 14px; padding: 6px 4px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--fg); text-align: center; font-variant-numeric: tabular-nums; }
+.list { flex: 1; min-height: 0; overflow: auto; padding: 6px 6px 16px; display: flex; flex-direction: column; gap: 1px; }
+.li { font: inherit; text-align: left; border: 0; background: transparent; color: var(--fg); border-radius: 8px; padding: 8px 10px; display: flex; gap: 8px; align-items: baseline; cursor: pointer; font-size: 13.5px; line-height: 1.4; min-width: 0; }
+.li:hover, .li[aria-current="true"] { background: var(--accent-soft); }
+.li:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.li .k { color: var(--accent); font-weight: 700; font-size: 12.5px; flex: none; min-width: 3.4em; font-variant-numeric: tabular-nums; }
+.li .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.li .pn { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; flex: none; }
+.empty { font-size: 13px; color: var(--muted); padding: 12px; line-height: 1.6; }
+.mark-bar { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.mark-bar .tb { width: 100%; justify-content: center; }
+.seg.c2 { grid-template-columns: repeat(2, 1fr); }
+.seg.c3 { grid-template-columns: repeat(3, 1fr); }
+.pop { max-height: calc(100% - 12px); overflow: auto; }
+.recent { display: flex; flex-direction: column; gap: 2px; }
+.recent .li { padding: 7px 8px; }
+input.sw.custom { -webkit-appearance: none; appearance: none; background: conic-gradient(#f43, #fc3, #3c6, #3cf, #36f, #c3f, #f43); }
+input.sw.custom::-webkit-color-swatch-wrapper { padding: 5px; }
+input.sw.custom::-webkit-color-swatch { border: 0; border-radius: 50%; }
+input.sw.custom::-moz-color-swatch { border: 0; border-radius: 50%; }
+
+/* ---------- tablet ---------- */
+.m-tablet .thumbs { position: absolute; left: 0; top: 0; bottom: 0; box-shadow: var(--shadow); }
+@media (max-width: 900px) {
+  .m-tablet .memo, .m-pc .memo { position: absolute; left: 0; right: 0; bottom: 0; width: auto; height: 46%; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(0,0,0,.12); }
+  .m-tablet .memo-list-head, .m-tablet .memo-list { display: none; }
+  .m-tablet .note { margin-bottom: 12px; }
+  .m-tablet .fname { display: none; }
+}
+
+/* ---------- phone ---------- */
+.m-phone .bar { flex-wrap: nowrap; gap: 4px; padding-block: 4px; }
+.m-phone .bar .tb { min-width: 42px; height: 44px; padding: 0 4px; font-size: 10px; }
+.m-phone .bar .tb.primary, .m-phone .bar .tb.ghost { padding: 0 10px; font-size: 13px; height: 38px; }
+.m-phone .fname { flex: 1; max-width: none; }
+.m-phone .dock-row.tools .grp { flex: 1; min-width: 0; }
+.m-phone .dock-row.tools .tb { min-width: 0; flex: 1; height: 50px; padding: 0 2px; font-size: 10px; }
+.m-phone .dock-row.opts { gap: 6px; }
+.m-phone .dock-row.opts #gUndo .tb { min-width: 40px; height: 40px; font-size: 0; gap: 0; }
+.m-phone .dock-row.opts #fingerBtn { min-width: 58px; height: 44px; font-size: 10px; }
+.m-phone .dock-row.opts .style-row { flex: 1; min-width: 0; justify-content: center; gap: 6px 8px; }
+.m-phone .sw { width: 26px; height: 26px; }
+.m-phone .kinds .tb { min-width: 36px; height: 36px; }
+.m-phone .width input { width: 64px; }
+.m-phone .thumbs { position: absolute; inset: 0; width: auto; border-right: 0; }
+.m-phone .thumb-list { grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 12px 16px 20px; }
+.m-phone .memo { position: absolute; left: 0; right: 0; bottom: 0; width: auto; height: 58%; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(0,0,0,.14); border-radius: 16px 16px 0 0; }
+.m-phone .memo-list { min-height: 0; }
+.m-phone .searchbar { left: 8px; right: 8px; top: 8px; max-width: none; }
+.m-phone .searchbar input { width: auto; }
+.m-phone .hud { left: 12px; bottom: 10px; }
+@media (max-width: 380px) { .m-phone .bar .tb span.lbl { display: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="bar" id="bar"></header>
+  <div class="main" id="main">
+    <aside class="thumbs" id="thumbs" aria-label="사이드바" hidden>
+      <div class="side-tabs" role="tablist">
+        <button class="side-tab" role="tab" data-tab="pages">페이지</button>
+        <button class="side-tab" role="tab" data-tab="outline">목차</button>
+        <button class="side-tab" role="tab" data-tab="marks">북마크</button>
+        <button class="side-tab" role="tab" data-tab="annots">주석</button>
+      </div>
+      <div class="jump">
+        <label for="jumpIn">쪽 이동</label><input id="jumpIn" type="number" inputmode="numeric" min="1" enterkeyhint="go"><span id="jumpTotal">/ 0쪽</span>
+        <span class="spacer"></span><button class="link" id="thumbsClose">닫기</button>
+      </div>
+      <div class="side-pane" data-pane="pages">
+      <div class="page-ops">
+        <button class="tb" id="opAdd" title="현재 페이지 뒤에 빈 페이지 추가"><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M12 10v7M8.5 13.5h7"/></svg>빈 페이지</button>
+        <button class="tb" id="opRotate" title="현재 페이지를 오른쪽으로 90° 회전"><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>회전</button>
+        <button class="tb danger" id="opDelete" title="현재 페이지 삭제"><svg viewBox="0 0 24 24"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/></svg>삭제</button>
+      </div>
+      <div class="thumb-list" id="thumbList"></div>
+      </div>
+      <div class="side-pane" data-pane="outline" hidden><div class="list" id="outlineList"></div></div>
+      <div class="side-pane" data-pane="marks" hidden>
+        <div class="mark-bar"><button class="tb ghost" id="markBtn">☆ 현재 쪽 북마크</button></div>
+        <div class="list" id="markList"></div>
+      </div>
+      <div class="side-pane" data-pane="annots" hidden><div class="list" id="annotList"></div></div>
+    </aside>
+    <div class="stage">
+    <div class="viewer" id="viewer" tabindex="-1">
+      <div class="pages" id="pages"></div>
+    </div>
+    <div class="hud" id="hud">– / –쪽</div>
+    <button class="pager" id="pagerPrev" aria-label="이전 쪽" hidden>‹</button>
+    <button class="pager" id="pagerNext" aria-label="다음 쪽" hidden>›</button>
+    <div class="searchbar" id="searchbar" hidden>
+      <input id="q" type="search" placeholder="문서에서 찾기" enterkeyhint="search" autocomplete="off">
+      <span class="count" id="qCount"></span>
+      <button class="tb" id="qPrev" aria-label="이전 결과"><svg viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></svg></button>
+      <button class="tb" id="qNext" aria-label="다음 결과"><svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="tb" id="qClose" aria-label="검색 닫기"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    </div>
+    <aside class="memo" id="memo" aria-label="페이지 메모" hidden>
+      <div class="memo-head">
+        <button class="pill" id="memoPrev" aria-label="이전 페이지">‹</button>
+        <h2 id="memoTitle">1쪽 메모</h2>
+        <button class="pill" id="memoNext" aria-label="다음 페이지">›</button>
+      </div>
+      <div class="note">
+        <textarea id="memoText" placeholder="이 페이지에 대한 메모를 적어 보세요."></textarea>
+        <div class="note-meta"><span id="memoCount">0자</span><span id="memoSaved"></span></div>
+      </div>
+      <div class="memo-list-head"><span>메모가 있는 페이지</span><button class="link" id="memoClose">닫기</button></div>
+      <div class="memo-list" id="memoList"></div>
+    </aside>
+    <div class="pop" id="pop" hidden>
+      <h3>넘기기</h3>
+      <div class="seg c2" data-set="flow"><button class="opt" data-val="scroll">연속 보기</button><button class="opt" data-val="paged">한 쪽씩</button></div>
+      <h3>쪽 배치</h3>
+      <div class="seg c3" data-set="spread"><button class="opt" data-val="single">1쪽</button><button class="opt" data-val="double">2쪽</button><button class="opt" data-val="cover">2쪽+표지</button></div>
+      <h3>맞춤</h3>
+      <div class="seg c2" data-set="fit"><button class="opt" data-val="width">폭 맞춤</button><button class="opt" data-val="page">쪽 전체</button></div>
+      <h3>읽기 색</h3>
+      <div class="seg c3" data-set="tone"><button class="opt" data-val="normal">기본</button><button class="opt" data-val="sepia">세피아</button><button class="opt" data-val="night">밤</button></div>
+      <h3>화면 버전</h3>
+      <div class="seg" id="modeSeg">
+        <button class="opt" data-mode="auto">자동</button>
+        <button class="opt" data-mode="pc">PC</button>
+        <button class="opt" data-mode="tablet">태블릿</button>
+        <button class="opt" data-mode="phone">휴대폰</button>
+      </div>
+      <p class="hint" id="modeHint"></p>
+      <h3>최근 파일</h3>
+      <div class="recent" id="recentList"></div>
+      <button class="row" id="memoExport">메모만 저장 (.txt)</button>
+      <button class="row" id="showGuide">사용 안내 문서 열기</button>
+    </div>
+    <div class="drop" id="drop" hidden>여기에 PDF를 놓으면 열려요</div>
+    <div class="busy" id="busy" hidden><div id="busyText">여는 중…</div></div>
+  </div>
+  <div class="dock" id="dock" hidden></div>
+  <div class="toast" id="toast" role="status"></div>
+</div>
+
+<!-- parts placed into the top bar or the phone dock depending on the screen version -->
+<div id="parts" hidden>
+  <div class="grp" id="gFile">
+    <label class="tb primary" for="fileIn" title="PDF 열기 (Ctrl+O)">
+      <svg viewBox="0 0 24 24"><path d="M3 6.5h6l2 2h10V19H3z"/></svg><span class="lbl">PDF 열기</span>
+    </label>
+    <input id="fileIn" type="file" accept="application/pdf,.pdf" hidden>
+    <button class="tb ghost" id="saveBtn" title="필기와 메모를 넣어 PDF로 저장 (Ctrl+S)">
+      <svg viewBox="0 0 24 24"><path d="M12 4v11m-5-5 5 5 5-5M4 20h16"/></svg><span class="lbl">저장</span>
+    </button>
+  </div>
+  <div class="grp" id="gTools" role="group" aria-label="도구">
+    <button class="tb" data-tool="pen" title="펜 (P)"><svg viewBox="0 0 24 24"><path d="M4 20l4.5-1L19.5 8 16 4.5 5 15.5z"/><path d="M14 6.5 17.5 10"/></svg>펜</button>
+    <button class="tb" data-tool="hl" title="형광펜 (H)"><svg viewBox="0 0 24 24"><path d="M9 14.5 16.5 4l3.5 3.5L9.5 15z"/><path d="M9 14.5 7 17l2 2 2.5-2.5"/><path d="M4 21h9"/></svg>형광펜</button>
+    <button class="tb" data-tool="text" title="텍스트 (T)"><svg viewBox="0 0 24 24"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg>텍스트</button>
+    <button class="tb" data-tool="shape" title="도형 (S)"><svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="10" height="10" rx="1"/><circle cx="15" cy="15" r="5.5"/></svg>도형</button>
+    <button class="tb" data-tool="eraser" title="지우개 (E)"><svg viewBox="0 0 24 24"><path d="M8 20h12"/><path d="M4.5 15.5 14 6l5 5-8 8H8z"/><path d="M9 11l5 5"/></svg>지우개</button>
+    <button class="tb" data-tool="hand" title="이동 (V)"><svg viewBox="0 0 24 24"><path d="M8 13V6.5a1.5 1.5 0 0 1 3 0V11m0-5.5a1.5 1.5 0 0 1 3 0V11m0-4a1.5 1.5 0 0 1 3 0v6.5c0 4-2.7 7-6.2 7-2.3 0-3.9-1.2-5.3-3.4l-1.6-2.6a1.5 1.5 0 0 1 2.5-1.6L8 13"/></svg>이동</button>
+  </div>
+  <div class="style-row" id="gStyle">
+    <div class="swatches" id="swatches" role="group" aria-label="색"></div>
+    <div class="kinds" id="kinds" role="group" aria-label="도형 종류">
+      <button class="tb" data-kind="rect" aria-label="사각형"><svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="1"/></svg></button>
+      <button class="tb" data-kind="ellipse" aria-label="원"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8.5" ry="6.5"/></svg></button>
+      <button class="tb" data-kind="line" aria-label="직선"><svg viewBox="0 0 24 24"><path d="M5 19 19 5"/></svg></button>
+      <button class="tb" data-kind="arrow" aria-label="화살표"><svg viewBox="0 0 24 24"><path d="M5 19 19 5M10 5h9v9"/></svg></button>
+    </div>
+    <label class="width" id="widthBox"><span id="wLabel">굵기</span> <input id="wRange" type="range" min="0.5" max="6" step="0.1" value="1.6"></label>
+  </div>
+  <div class="grp" id="gUndo">
+    <button class="tb" id="undoBtn" disabled title="되돌리기 (Ctrl+Z)"><svg viewBox="0 0 24 24"><path d="M9 8 5 12l4 4"/><path d="M5 12h10a4 4 0 0 1 0 8h-3"/></svg>되돌리기</button>
+    <button class="tb" id="redoBtn" disabled title="다시 실행 (Ctrl+Y)"><svg viewBox="0 0 24 24"><path d="m15 8 4 4-4 4"/><path d="M19 12H9a4 4 0 0 0 0 8h3"/></svg>다시</button>
+  </div>
+  <div class="grp" id="gZoom">
+    <button class="tb" id="zoomOut" title="축소 (Ctrl+-)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M8 11h6M16 16l4 4"/></svg>축소</button>
+    <span class="zoom-label" id="zoomLabel">100%</span>
+    <button class="tb" id="zoomIn" title="확대 (Ctrl+=)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M8 11h6M11 8v6M16 16l4 4"/></svg>확대</button>
+    <button class="tb" id="fitBtn" title="폭 맞춤 (Ctrl+0)"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>폭 맞춤</button>
+  </div>
+  <button class="tb" id="fingerBtn" aria-pressed="false" title="켜면 손가락 하나로 쓰고, 두 손가락으로 넘기거나 확대해요"><svg viewBox="0 0 24 24"><path d="M9 12V5.5a1.5 1.5 0 0 1 3 0V12m0-3a1.5 1.5 0 0 1 3 0v3m0-1.5a1.5 1.5 0 0 1 3 0V15c0 3.5-2.5 6-5.5 6S7 19.5 6 17l-1.6-3.2A1.4 1.4 0 0 1 6.7 12.3L9 15"/><path d="M15 3.5l2.5-1.5M18 6l2-1"/></svg>손가락 필기</button>
+  <span class="fname" id="fname"></span>
+  <div class="grp" id="gPanels">
+    <button class="tb" id="searchBtn" title="찾기 (Ctrl+F)"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><span class="lbl">찾기</span></button>
+    <button class="tb" id="thumbsBtn" aria-pressed="false" title="페이지 목록"><svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="7" height="8" rx="1"/><rect x="13" y="3.5" width="7" height="8" rx="1"/><rect x="4" y="13.5" width="7" height="7" rx="1"/><rect x="13" y="13.5" width="7" height="7" rx="1"/></svg><span class="lbl">페이지</span></button>
+    <button class="tb" id="memoBtn" aria-pressed="false" title="페이지 메모"><svg viewBox="0 0 24 24"><path d="M5 4h14v11l-5 5H5z"/><path d="M14 20v-5h5M8 9h8M8 12.5h5"/></svg><span class="lbl">메모</span></button>
+    <button class="tb" id="moreBtn" aria-pressed="false" title="보기 방식, 화면 버전, 최근 파일"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="7.5" height="14" rx="1"/><rect x="13" y="5" width="7.5" height="14" rx="1"/></svg><span class="lbl">보기</span></button>
+  </div>
+</div>
+
+<script src="lib/pdf.min.js"></script>
+<script src="lib/pdf-lib.min.js"></script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'lib/pdf.worker.min.js';
+
+const PEN_COLORS = ['#1a1a1a', '#1f4fd1', '#d62828', '#1b8a4b'];
+const PEN_NAMES = ['검정', '파랑', '빨강', '초록'];
+const HL_COLORS = ['#ffd400', '#7ee05a', '#ff7eb6', '#5ec8ff'];
+const HL_NAMES = ['노랑', '연두', '분홍', '하늘'];
+const WIDTH = { pen: [0.5, 6, 0.1, '굵기'], hl: [6, 28, 1, '굵기'], shape: [0.5, 8, 0.1, '굵기'], text: [8, 40, 1, '크기'] };
+const MIN_ZOOM = 0.25, MAX_ZOOM = 6, MAX_PIXELS = 16e6, HL_ALPHA = 0.38;
+const TEXT_FONT = '"IBM Plex Sans KR", "Malgun Gothic", sans-serif', LH = 1.35;
+const MODE_NAMES = { pc: 'PC', tablet: '태블릿', phone: '휴대폰' };
+
+const viewer = $('#viewer'), pagesEl = $('#pages');
+const zoomLabel = $('#zoomLabel');   // its group is detached in the phone layout
+const PARTS = {};
+for (const id of ['gFile', 'gTools', 'gStyle', 'gUndo', 'gZoom', 'fingerBtn', 'fname', 'gPanels']) PARTS[id] = document.getElementById(id);
+
+// ---------- preferences (per device) ----------
+const DEFAULT_PREFS = {
+  mode: 'auto', tool: 'pen', shape: 'rect', fingerDraw: false, sideTab: 'pages',
+  view: { flow: 'scroll', spread: 'single', fit: 'width', tone: 'normal' },
+  custom: { pen: '#7a3cff', hl: '#ff9f1c', text: '#7a3cff', shape: '#7a3cff' },
+  color: { pen: PEN_COLORS[0], hl: HL_COLORS[0], text: PEN_COLORS[0], shape: PEN_COLORS[2] },
+  width: { pen: 1.6, hl: 12, text: 14, shape: 1.6 },
+  panels: { pc: { memo: true, thumbs: true }, tablet: { memo: true, thumbs: false }, phone: { memo: false, thumbs: false } },
+};
+const prefs = (() => {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem('pdfpilgi.prefs')) || {}; } catch (e) {}
+  const p = JSON.parse(JSON.stringify(DEFAULT_PREFS));
+  for (const k of ['mode', 'tool', 'shape', 'fingerDraw', 'sideTab']) if (k in saved) p[k] = saved[k];
+  if ('penOnly' in saved && !('fingerDraw' in saved)) p.fingerDraw = !saved.penOnly;
+  for (const k of ['color', 'width', 'view', 'custom']) Object.assign(p[k], saved[k] || {});
+  for (const m in p.panels) Object.assign(p.panels[m], (saved.panels || {})[m] || {});
+  if (!WIDTH[p.tool] && !['eraser', 'hand'].includes(p.tool)) p.tool = 'pen';
+  return p;
+})();
+function savePrefs() { try { localStorage.setItem('pdfpilgi.prefs', JSON.stringify(prefs)); } catch (e) {} }
+
+// ---------- IndexedDB (autosave on this device) ----------
+const idb = (() => {
+  let dbp;
+  function open() {
+    if (!dbp) dbp = new Promise((res, rej) => {
+      try {
+        const r = indexedDB.open('pdf-pilgi', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('kv');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      } catch (e) { rej(e); }
+    });
+    return dbp;
+  }
+  async function req(mode, fn) {
+    try {
+      const db = await open();
+      return await new Promise((res, rej) => {
+        const r = fn(db.transaction('kv', mode).objectStore('kv'));
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+    } catch (e) { return undefined; }
+  }
+  return { get: k => req('readonly', s => s.get(k)), set: (k, v) => req('readwrite', s => s.put(v, k)), del: k => req('readwrite', s => s.delete(k)) };
+})();
+
+// ---------- state ----------
+const S = {
+  pdf: null, bytes: null, name: '', key: '', pages: [], rows: [], rowIdx: 0, outlineP: null,
+  ann: { pages: {}, memos: {} },
+  zoom: 1, fit: true, cur: 1, memoPage: 1, mode: '',
+  undo: [], redo: [],
+};
+const dpr = () => Math.min(window.devicePixelRatio || 1, 3);
+const isDrawTool = t => t === 'pen' || t === 'hl' || t === 'text' || t === 'shape';
+const listOf = n => S.ann.pages[n] || (S.ann.pages[n] = []);
+
+let persistTimer = 0;
+function persistSoon() {
+  clearTimeout(persistTimer);
+  $('#memoSaved').textContent = '';
+  persistTimer = setTimeout(async () => {
+    if (!S.key) return;
+    await idb.set('ann:' + S.key, S.ann);
+    $('#memoSaved').textContent = '이 기기에 저장됨';
+  }, 500);
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 2800);
+}
+function busy(text) { $('#busy').hidden = !text; if (text) $('#busyText').textContent = text; }
+
+// ---------- screen versions: PC / tablet / phone ----------
+function detectMode() {
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  const short = Math.min(screen.width, screen.height);
+  if (innerWidth < 600 || (coarse && short < 600)) return 'phone';
+  if (coarse || navigator.maxTouchPoints > 1 && !matchMedia('(hover: hover)').matches) return 'tablet';
+  return 'pc';
+}
+function currentMode() { return prefs.mode === 'auto' ? detectMode() : prefs.mode; }
+function sep() { const s = document.createElement('span'); s.className = 'sep'; return s; }
+function spacer() { const s = document.createElement('span'); s.className = 'spacer'; return s; }
+function applyMode(force) {
+  const m = currentMode();
+  if (m === S.mode && !force) return;
+  S.mode = m;
+  document.body.className = 'm-' + m;
+  const P = id => PARTS[id];
+  const bar = $('#bar'), dock = $('#dock');
+  if (m === 'phone') {
+    bar.replaceChildren(P('gFile'), P('fname'), P('gPanels'));
+    const opts = document.createElement('div'); opts.className = 'dock-row opts';
+    opts.append(P('gUndo'), P('gStyle'), spacer(), P('fingerBtn'));
+    const tools = document.createElement('div'); tools.className = 'dock-row tools';
+    tools.append(P('gTools'));
+    dock.replaceChildren(opts, tools);
+    dock.hidden = false;
+    P('gZoom').remove();
+  } else {
+    bar.replaceChildren(P('gFile'), sep(), P('gTools'), P('gStyle'), sep(), P('gUndo'), sep(), P('gZoom'), spacer(), P('fingerBtn'), P('fname'), P('gPanels'));
+    dock.replaceChildren(); dock.hidden = true;
+  }
+  renderToolbar(); renderPanels(); renderModeMenu();
+  if (S.fit) requestAnimationFrame(fitWidth);
+}
+function renderModeMenu() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === prefs.mode)));
+  $('#modeHint').textContent = prefs.mode === 'auto'
+    ? '이 기기를 ' + MODE_NAMES[S.mode] + '(으)로 알아봤어요. 링크 끝에 #pc, #tablet, #phone을 붙이면 그 버전으로 바로 열려요.'
+    : MODE_NAMES[S.mode] + ' 버전으로 고정했어요. 자동을 누르면 기기에 맞춰 바뀌어요.';
+}
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { prefs.mode = b.dataset.mode; savePrefs(); applyMode(); renderModeMenu(); });
+
+// ---------- tool bar ----------
+function renderToolbar() {
+  const t = prefs.tool;
+  document.querySelectorAll('[data-tool]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tool === t)));
+  document.querySelectorAll('[data-kind]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.kind === prefs.shape)));
+  const styled = isDrawTool(t);
+  $('#gStyle').hidden = !styled;
+  $('#kinds').hidden = t !== 'shape';
+  const sw = $('#swatches'); sw.replaceChildren();
+  if (styled) {
+    const list = t === 'hl' ? HL_COLORS : PEN_COLORS, names = t === 'hl' ? HL_NAMES : PEN_NAMES;
+    const curColor = (t === 'text' && E) ? E.c : prefs.color[t];
+    list.forEach((c, i) => {
+      const b = document.createElement('button');
+      b.className = 'sw'; b.style.background = c; b.setAttribute('aria-label', names[i]);
+      b.setAttribute('aria-pressed', String(curColor === c));
+      b.addEventListener('pointerdown', e => e.preventDefault());   // keep the text editor focused
+      b.onclick = () => { prefs.color[t] = c; savePrefs(); if (t === 'text' && E) { E.c = c; styleEditor(); } renderToolbar(); };
+      sw.appendChild(b);
+    });
+    const cc = document.createElement('input');
+    cc.type = 'color'; cc.className = 'sw custom'; cc.title = '색 직접 고르기'; cc.setAttribute('aria-label', '색 직접 고르기');
+    const own = !list.includes(curColor);
+    cc.value = own ? curColor : prefs.custom[t];
+    cc.setAttribute('aria-pressed', String(own));
+    cc.oninput = () => {
+      prefs.color[t] = prefs.custom[t] = cc.value; savePrefs();
+      if (t === 'text' && E) { E.c = cc.value; styleEditor(); }
+    };
+    cc.onchange = renderToolbar;
+    sw.appendChild(cc);
+    const r = $('#wRange'), [mn, mx, st, label] = WIDTH[t];
+    r.min = mn; r.max = mx; r.step = st; r.value = (t === 'text' && E) ? E.s : prefs.width[t];
+    $('#wLabel').textContent = label;
+  }
+  $('#fingerBtn').setAttribute('aria-pressed', String(prefs.fingerDraw));
+}
+function setTool(t) {
+  if (E && t !== 'text') commitEditor();
+  prefs.tool = t; savePrefs(); renderToolbar();
+}
+document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+document.querySelectorAll('[data-kind]').forEach(b => b.onclick = () => { prefs.shape = b.dataset.kind; savePrefs(); renderToolbar(); });
+$('#wRange').addEventListener('pointerdown', e => { if (E) e.preventDefault(); });
+$('#wRange').oninput = e => {
+  const t = prefs.tool; prefs.width[t] = +e.target.value; savePrefs();
+  if (t === 'text' && E) { E.s = +e.target.value; styleEditor(); }
+};
+$('#fingerBtn').onclick = () => {
+  prefs.fingerDraw = !prefs.fingerDraw; savePrefs(); renderToolbar();
+  toast(prefs.fingerDraw ? '손가락 하나로 쓰고, 두 손가락으로 넘기거나 확대해요.' : '손가락은 넘기기·확대용이에요. S펜이나 마우스로 써요.');
+};
+
+// ---------- panels ----------
+function panels() { return prefs.panels[S.mode] || prefs.panels.pc; }
+function renderPanels() {
+  const P = panels();
+  $('#memo').hidden = !P.memo; $('#thumbs').hidden = !P.thumbs;
+  $('#memoBtn').setAttribute('aria-pressed', String(!!P.memo));
+  $('#thumbsBtn').setAttribute('aria-pressed', String(!!P.thumbs));
+  $('#thumbsClose').hidden = S.mode === 'pc';
+  if (P.thumbs) renderSide();
+}
+function sideOpen(tab) { return !$('#thumbs').hidden && prefs.sideTab === tab; }
+function renderSide() {
+  const tab = prefs.sideTab;
+  document.querySelectorAll('.side-tab').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
+  document.querySelectorAll('.side-pane').forEach(p => p.hidden = p.dataset.pane !== tab);
+  if (tab === 'pages') { scheduleThumbs(); markThumb(); }
+  else if (tab === 'outline') renderOutline();
+  else if (tab === 'marks') renderMarks();
+  else if (tab === 'annots') renderAnnots();
+}
+document.querySelectorAll('.side-tab').forEach(b => b.onclick = () => { prefs.sideTab = b.dataset.tab; savePrefs(); renderSide(); });
+function togglePanel(name, on) {
+  const P = panels();
+  P[name] = on == null ? !P[name] : on;
+  if (S.mode === 'phone' && P[name]) P[name === 'memo' ? 'thumbs' : 'memo'] = false;
+  savePrefs(); renderPanels();
+  if (S.fit && S.mode === 'pc') requestAnimationFrame(fitWidth);
+}
+$('#memoBtn').onclick = () => togglePanel('memo');
+$('#thumbsBtn').onclick = () => togglePanel('thumbs');
+$('#memoClose').onclick = () => togglePanel('memo', false);
+$('#thumbsClose').onclick = () => togglePanel('thumbs', false);
+$('#moreBtn').onclick = e => {
+  e.stopPropagation(); const p = $('#pop'); p.hidden = !p.hidden;
+  $('#moreBtn').setAttribute('aria-pressed', String(!p.hidden));
+  if (!p.hidden) { renderModeMenu(); renderViewMenu(); renderRecent(); }
+};
+function renderViewMenu() {
+  document.querySelectorAll('[data-set]').forEach(seg => seg.querySelectorAll('[data-val]').forEach(b =>
+    b.setAttribute('aria-pressed', String(prefs.view[seg.dataset.set] === b.dataset.val))));
+}
+document.querySelectorAll('[data-set]').forEach(seg => seg.querySelectorAll('[data-val]').forEach(b => b.onclick = () => {
+  prefs.view[seg.dataset.set] = b.dataset.val; savePrefs(); renderViewMenu(); applyView();
+}));
+
+// ---------- view modes: continuous / one at a time, single / two-up / two-up with cover ----------
+function buildRows() {
+  const v = prefs.view;
+  S.rows = []; pagesEl.replaceChildren();
+  pagesEl.classList.toggle('paged', v.flow === 'paged');
+  let i = 0;
+  while (i < S.pages.length) {
+    const k = v.spread === 'single' || (v.spread === 'cover' && i === 0) ? 1 : 2;
+    const pages = S.pages.slice(i, i + k), el = document.createElement('div');
+    el.className = 'row';
+    pages.forEach(p => { p.row = S.rows.length; el.appendChild(p.el); });
+    S.rows.push({ el, pages }); pagesEl.appendChild(el);
+    i += k;
+  }
+  if (v.flow === 'paged') {
+    S.rowIdx = (S.pages[S.cur - 1] || S.pages[0] || { row: 0 }).row || 0;
+    S.rows.forEach((r, j) => r.el.hidden = j !== S.rowIdx);
+  }
+}
+function applyView() {
+  const v = prefs.view;
+  pagesEl.classList.toggle('tone-sepia', v.tone === 'sepia');
+  pagesEl.classList.toggle('tone-night', v.tone === 'night');
+  $('#pagerPrev').hidden = $('#pagerNext').hidden = v.flow !== 'paged';
+  if (!S.pages.length) return;
+  const keep = S.cur;
+  buildRows();
+  fitWidth();
+  goToPage(keep);
+  trackPage();
+}
+function setRow(i) {
+  i = Math.max(0, Math.min(S.rows.length - 1, i));
+  S.rowIdx = i;
+  S.rows.forEach((r, j) => r.el.hidden = j !== i);
+  viewer.scrollTop = 0;
+  trackPage(); scheduleRender(30);
+}
+function flip(dir) {
+  const pg = S.pages[S.cur - 1]; if (!pg) return;
+  const r = S.rows[pg.row + dir]; if (r) goToPage(r.pages[0].n);
+}
+$('#pagerPrev').onclick = () => flip(-1);
+$('#pagerNext').onclick = () => flip(1);
+document.addEventListener('pointerdown', e => {
+  if (!$('#pop').hidden && !e.target.closest('#pop, #moreBtn')) { $('#pop').hidden = true; $('#moreBtn').setAttribute('aria-pressed', 'false'); }
+}, true);
+
+// ---------- Korean CMaps and standard fonts, bundled next to the page as pdfdata.json ----------
+let bundleP = null;
+function bundle() {
+  if (!bundleP) bundleP = fetch('pdfdata.json').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(() => ({ cmaps: {}, fonts: {} }));
+  return bundleP;
+}
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+class BundledCMaps {
+  async fetch({ name }) {
+    const d = (await bundle()).cmaps[name];
+    if (!d) throw new Error('이 PDF에 필요한 글꼴 정보(' + name + ')가 없어요.');
+    return { cMapData: b64(d), compressionType: pdfjsLib.CMapCompressionType.BINARY };
+  }
+}
+class BundledFonts {
+  async fetch({ filename }) {
+    const d = (await bundle()).fonts[filename];
+    if (!d) throw new Error('missing font ' + filename);
+    return b64(d);
+  }
+}
+
+// ---------- opening documents ----------
+async function openFile(bytes, name, opts = {}) {
+  if (E) commitEditor();
+  busy('PDF를 여는 중…');
+  try {
+    const key = opts.key || (name + '|' + bytes.length);
+    const edited = await idb.get('bytes:' + key);
+    const docBytes = edited ? new Uint8Array(edited) : bytes;
+    const pdf = await loadPdf(docBytes);
+    let ann = await idb.get('ann:' + key);
+    if (!ann) {
+      ann = opts.ann || { pages: {}, memos: {} };
+      try {
+        const meta = await pdf.getMetadata();
+        const raw = meta && meta.info && meta.info.Custom && meta.info.Custom.PdfPilgiMemos;
+        if (raw) ann.memos = JSON.parse(raw) || {};
+      } catch (e) {}
+    }
+    S.key = key; S.name = name; S.ann = ann;
+    S.undo = []; S.redo = []; updateUndo();
+    await showPdf(pdf, docBytes, { page: 1, fit: true });
+    $('#fname').textContent = name; $('#fname').title = name;
+    if (opts.remember) rememberFile(name, key, bytes);
+    if (edited) toast('이전에 페이지를 편집한 상태로 열었어요.');
+  } catch (e) {
+    console.error(e);
+    toast(e && e.name === 'PasswordException' ? '암호가 걸린 PDF는 아직 열 수 없어요.' : 'PDF를 열지 못했어요. 파일이 손상됐는지 확인해 주세요.');
+  } finally { busy(''); }
+}
+function loadPdf(bytes) {
+  return pdfjsLib.getDocument({
+    data: bytes.slice(), cMapUrl: 'bundle:', cMapPacked: true, standardFontDataUrl: 'bundle:',
+    CMapReaderFactory: BundledCMaps, StandardFontDataFactory: BundledFonts, useWorkerFetch: false,
+  }).promise;
+}
+async function showPdf(pdf, bytes, { page = 1, fit = false } = {}) {
+  if (S.pdf && S.pdf !== pdf) S.pdf.destroy();
+  S.pdf = pdf; S.bytes = bytes; S.outlineP = null;
+  if (!Array.isArray(S.ann.marks)) S.ann.marks = [];
+  textCache.clear(); clearSearch(true);
+  io.disconnect(); pagesEl.replaceChildren(); S.pages = [];
+  for (let n = 1; n <= pdf.numPages; n++) {
+    const pg = await pdf.getPage(n);
+    S.pages.push(makePage(n, pg.getViewport({ scale: 1 })));
+  }
+  S.cur = Math.min(page, S.pages.length); S.memoPage = S.cur;
+  buildRows();
+  buildThumbs();
+  if (fit) fitWidth(); else { layout(); scheduleRender(30); }
+  goToPage(S.cur);
+  showMemo(); trackPage();
+  if (!$('#thumbs').hidden) renderSide();
+}
+
+// ---------- recent files (kept on this device) ----------
+async function rememberFile(name, key, bytes) {
+  let rec = (await idb.get('recent')) || [];
+  rec = rec.filter(r => r.key !== key);
+  rec.unshift({ key, name, size: bytes.length, time: Date.now() });
+  await idb.set('file:' + key, bytes.slice().buffer);
+  for (const old of rec.slice(8)) await idb.del('file:' + old.key);
+  await idb.set('recent', rec.slice(0, 8));
+}
+async function renderRecent() {
+  const box = $('#recentList'), rec = (await idb.get('recent')) || [];
+  box.replaceChildren();
+  if (!rec.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = 'PDF를 열면 여기에 최근 8개가 모여요.'; box.appendChild(d); return; }
+  for (const r of rec) {
+    const b = document.createElement('button'); b.className = 'li';
+    if (r.key === S.key) b.setAttribute('aria-current', 'true');
+    const t = document.createElement('span'); t.className = 't'; t.textContent = r.name;
+    const d = document.createElement('span'); d.className = 'pn';
+    const dt = new Date(r.time); d.textContent = (dt.getMonth() + 1) + '/' + dt.getDate();
+    b.append(t, d);
+    b.onclick = async () => {
+      $('#pop').hidden = true; $('#moreBtn').setAttribute('aria-pressed', 'false');
+      const buf = await idb.get('file:' + r.key);
+      if (!buf) { toast('이 파일은 기기에서 지워졌어요. ‘PDF 열기’로 다시 열어 주세요.'); return; }
+      openFile(new Uint8Array(buf), r.name, { key: r.key, remember: true });
+    };
+    box.appendChild(b);
+  }
+}
+
+$('#fileIn').onchange = async e => {
+  const f = e.target.files && e.target.files[0]; e.target.value = '';
+  if (f) openFile(new Uint8Array(await f.arrayBuffer()), f.name, { remember: true });
+};
+let dragDepth = 0;
+window.addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('#drop').hidden = false; });
+window.addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('#drop').hidden = true; } });
+window.addEventListener('dragover', e => e.preventDefault());
+window.addEventListener('drop', async e => {
+  e.preventDefault(); dragDepth = 0; $('#drop').hidden = true;
+  const f = [...(e.dataTransfer.files || [])].find(f => /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name));
+  if (f) openFile(new Uint8Array(await f.arrayBuffer()), f.name, { remember: true });
+});
+
+// ---------- pages ----------
+function makePage(n, vp) {
+  const el = document.createElement('div');
+  el.className = 'page'; el.dataset.n = n;
+  const pdfC = document.createElement('canvas'); pdfC.className = 'pdf';
+  const ink = document.createElement('canvas'); ink.className = 'ink';
+  const num = document.createElement('span'); num.className = 'pnum'; num.textContent = n;
+  const tab = document.createElement('button'); tab.className = 'memo-tab'; tab.setAttribute('aria-label', n + '쪽 메모 열기');
+  tab.hidden = !(S.ann.memos[n] || '').trim();
+  tab.addEventListener('pointerdown', e => e.stopPropagation());
+  tab.onclick = () => { S.memoPage = n; togglePanel('memo', true); showMemo(); };
+  el.append(pdfC, ink, num, tab);
+  const pg = { n, vp, w: vp.width, h: vp.height, el, pdfC, ink, tab, hits: null, scale: 0, inkScale: 0, visible: false };
+  io.observe(el);
+  return pg;
+}
+const io = new IntersectionObserver(entries => {
+  for (const en of entries) {
+    const pg = S.pages[+en.target.dataset.n - 1];
+    if (pg && pg.el === en.target) pg.visible = en.isIntersecting;
+  }
+  scheduleRender();
+}, { root: viewer, rootMargin: '120% 0px' });
+
+function layout() {
+  for (const pg of S.pages) {
+    pg.el.style.width = pg.w * S.zoom + 'px';
+    pg.el.style.height = pg.h * S.zoom + 'px';
+  }
+  zoomLabel.textContent = Math.round(S.zoom * 75) + '%';
+  if (E) styleEditor();
+}
+function targetScale(pg) { return Math.min(S.zoom * dpr(), Math.sqrt(MAX_PIXELS / (pg.w * pg.h))); }
+
+let renderTimer = 0, renderLoop = false;
+function scheduleRender(delay = 120) { clearTimeout(renderTimer); renderTimer = setTimeout(runRender, delay); }
+async function runRender() {
+  if (renderLoop) { scheduleRender(60); return; }
+  renderLoop = true;
+  try {
+    const pdf = S.pdf;
+    const vis = S.pages.filter(p => p.visible).sort((a, b) => Math.abs(a.n - S.cur) - Math.abs(b.n - S.cur));
+    for (const pg of vis) {
+      if (S.pdf !== pdf) break;
+      if (Math.abs(pg.scale - targetScale(pg)) > 1e-3) await renderPage(pg);
+      if (Math.abs(pg.inkScale - targetScale(pg)) > 1e-3) sizeInk(pg);
+    }
+    for (const pg of S.pages) {
+      if (!pg.visible && pg.scale && Math.abs(pg.n - S.cur) > 4) {
+        pg.pdfC.width = pg.pdfC.height = 0; pg.ink.width = pg.ink.height = 0; pg.scale = pg.inkScale = 0;
+      }
+    }
+  } finally { renderLoop = false; }
+}
+async function renderPage(pg) {
+  const pdf = S.pdf, scale = targetScale(pg);
+  const page = await pdf.getPage(pg.n);
+  const vp = page.getViewport({ scale });
+  const c = document.createElement('canvas');
+  c.className = 'pdf'; c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+  try { await page.render({ canvasContext: c.getContext('2d', { alpha: false }), viewport: vp }).promise; }
+  catch (e) { console.warn(e); return; }
+  if (S.pdf !== pdf || !pg.el.isConnected) return;
+  pg.el.replaceChild(c, pg.pdfC); pg.pdfC = c; pg.scale = scale;
+}
+function sizeInk(pg) {
+  const s = targetScale(pg);
+  pg.ink.width = Math.round(pg.w * s); pg.ink.height = Math.round(pg.h * s); pg.inkScale = s;
+  drawInk(pg);
+}
+
+// ---------- drawing items: pen, highlighter, shapes, text ----------
+const press = p => 0.35 + 1.3 * p;
+const measureCtx = document.createElement('canvas').getContext('2d');
+function measureText(it) {
+  measureCtx.font = '500 ' + it.s + 'px ' + TEXT_FONT;
+  const lines = it.text.split('\n');
+  let w = 0; for (const l of lines) w = Math.max(w, measureCtx.measureText(l).width);
+  return { bw: Math.ceil(w + 1), bh: lines.length * it.s * LH };
+}
+function inkCtx(pg) {
+  if (!pg.inkScale) sizeInk(pg);
+  const ctx = pg.ink.getContext('2d');
+  ctx.setTransform(pg.inkScale, 0, 0, pg.inkScale, 0, 0);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  return ctx;
+}
+function drawInk(pg) {
+  if (!pg || !pg.inkScale) return;
+  const ctx = inkCtx(pg);
+  ctx.clearRect(0, 0, pg.w, pg.h);
+  for (const it of S.ann.pages[pg.n] || []) if (!(E && E.item === it)) drawItem(ctx, it);
+}
+function drawItem(ctx, it) {
+  if (it.t === 'text') return drawText(ctx, it, it.x, it.y);
+  if (it.t === 'shape') return drawShape(ctx, it);
+  drawStroke(ctx, it);
+}
+function drawText(ctx, it, x, y) {
+  ctx.save();
+  ctx.font = '500 ' + it.s + 'px ' + TEXT_FONT; ctx.fillStyle = it.c; ctx.textBaseline = 'top';
+  it.text.split('\n').forEach((l, i) => ctx.fillText(l, x, y + i * it.s * LH + it.s * (LH - 1) / 2));
+  ctx.restore();
+}
+function arrowHead(a, w) {
+  const [x1, y1, x2, y2] = a, ang = Math.atan2(y2 - y1, x2 - x1), len = Math.max(8, w * 4.5);
+  return [[x2 - len * Math.cos(ang - 0.45), y2 - len * Math.sin(ang - 0.45)], [x2 - len * Math.cos(ang + 0.45), y2 - len * Math.sin(ang + 0.45)]];
+}
+// outline of a shape as polylines (used for hit testing and for saving)
+function shapePaths(it) {
+  const [x1, y1, x2, y2] = it.a;
+  if (it.k === 'line') return [[[x1, y1], [x2, y2]]];
+  if (it.k === 'arrow') { const [h1, h2] = arrowHead(it.a, it.w); return [[[x1, y1], [x2, y2]], [h1, [x2, y2], h2]]; }
+  if (it.k === 'rect') return [[[x1, y1], [x2, y1], [x2, y2], [x1, y2], [x1, y1]]];
+  const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, rx = Math.abs(x2 - x1) / 2, ry = Math.abs(y2 - y1) / 2, pts = [];
+  for (let i = 0; i <= 64; i++) { const a = i / 64 * Math.PI * 2; pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]); }
+  return [pts];
+}
+function drawShape(ctx, it) {
+  ctx.strokeStyle = it.c; ctx.lineWidth = it.w;
+  for (const path of shapePaths(it)) {
+    ctx.beginPath(); path.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+  }
+}
+function drawStroke(ctx, s) {
+  const p = s.p, n = p.length / 3;
+  ctx.strokeStyle = ctx.fillStyle = s.c;
+  if (s.t === 'hl') {
+    ctx.save();
+    ctx.globalAlpha = HL_ALPHA; ctx.globalCompositeOperation = 'multiply'; ctx.lineWidth = s.w;
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+    if (n === 1) ctx.lineTo(p[0] + 0.01, p[1]);
+    for (let i = 1; i < n - 1; i++) ctx.quadraticCurveTo(p[i * 3], p[i * 3 + 1], (p[i * 3] + p[i * 3 + 3]) / 2, (p[i * 3 + 1] + p[i * 3 + 4]) / 2);
+    if (n > 1) ctx.lineTo(p[(n - 1) * 3], p[(n - 1) * 3 + 1]);
+    ctx.stroke(); ctx.restore();
+    return;
+  }
+  if (n === 1) { ctx.beginPath(); ctx.arc(p[0], p[1], s.w * press(p[2]) / 2, 0, Math.PI * 2); ctx.fill(); return; }
+  for (let i = 0; i < n; i++) penSegment(ctx, s, i, i === n - 1);
+}
+// segment i of a pen stroke: i=0 head line, 1..n-2 smoothed curves, tail closes to the final point
+function penSegment(ctx, s, i, tail) {
+  const p = s.p, n = p.length / 3;
+  const P = k => [p[k * 3], p[k * 3 + 1], p[k * 3 + 2]];
+  const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+  ctx.beginPath();
+  if (tail) {
+    if (n < 2) return;
+    const a = P(n - 2), b = P(n - 1), m = mid(a, b);
+    ctx.lineWidth = s.w * press(b[2]); ctx.moveTo(m[0], m[1]); ctx.lineTo(b[0], b[1]);
+  } else if (i === 0) {
+    if (n < 2) return;
+    const a = P(0), b = P(1), m = mid(a, b);
+    ctx.lineWidth = s.w * press(a[2]); ctx.moveTo(a[0], a[1]); ctx.lineTo(m[0], m[1]);
+  } else {
+    if (i + 1 >= n) return;
+    const a = P(i - 1), b = P(i), c = P(i + 1), m1 = mid(a, b), m2 = mid(b, c);
+    ctx.lineWidth = s.w * press(b[2]); ctx.moveTo(m1[0], m1[1]); ctx.quadraticCurveTo(b[0], b[1], m2[0], m2[1]);
+  }
+  ctx.stroke();
+}
+
+// ---------- undo / redo: each action keeps the page's item list before and after ----------
+function pushAction(pg, before) {
+  S.undo.push({ pg, before, after: listOf(pg).slice() }); S.redo = [];
+  if (S.undo.length > 300) S.undo.shift();
+  updateUndo(); persistSoon();
+}
+function updateUndo() {
+  $('#undoBtn').disabled = !S.undo.length; $('#redoBtn').disabled = !S.redo.length;
+  if (sideOpen('annots')) { clearTimeout(annotTimer); annotTimer = setTimeout(renderAnnots, 250); }
+}
+let annotTimer = 0;
+function undo() { if (E) commitEditor(); const a = S.undo.pop(); if (!a) return; S.ann.pages[a.pg] = a.before.slice(); drawInk(S.pages[a.pg - 1]); S.redo.push(a); updateUndo(); persistSoon(); }
+function redo() { if (E) commitEditor(); const a = S.redo.pop(); if (!a) return; S.ann.pages[a.pg] = a.after.slice(); drawInk(S.pages[a.pg - 1]); S.undo.push(a); updateUndo(); persistSoon(); }
+$('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
+
+// ---------- zoom & scroll ----------
+function pageAt(x, y) {
+  let best = null, bd = Infinity;
+  for (const pg of S.pages) {
+    const r = pg.el.getBoundingClientRect(); if (!r.height) continue;
+    const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0;
+    const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+    const d = dy * 4 + dx;
+    if (d < bd) { bd = d; best = pg; }
+    if (r.top > y + 2000) break;
+  }
+  return best;
+}
+function anchorAt(x, y) {
+  const pg = pageAt(x, y); if (!pg) return null;
+  const r = pg.el.getBoundingClientRect();
+  return { pg, ux: (x - r.left) / S.zoom, uy: (y - r.top) / S.zoom };
+}
+function applyAnchor(a, x, y) {
+  if (!a) return;
+  const r = a.pg.el.getBoundingClientRect();
+  viewer.scrollLeft += r.left + a.ux * S.zoom - x;
+  viewer.scrollTop += r.top + a.uy * S.zoom - y;
+}
+function setZoom(z, x, y, anchor) {
+  z = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+  const vr = viewer.getBoundingClientRect();
+  if (x == null) { x = vr.left + vr.width / 2; y = vr.top + vr.height / 2; }
+  const a = anchor || anchorAt(x, y);
+  S.zoom = z; S.fit = false;
+  layout(); applyAnchor(a, x, y);
+  scheduleRender(180);
+}
+// fit the widest row to the window width, or ("쪽 전체") the whole row into the window
+function fitWidth() {
+  if (!S.rows.length) return;
+  const GAP = 14, paged = prefs.view.flow === 'paged';
+  let maxW = 0, maxH = 0, maxGap = 0;
+  for (const r of S.rows) {
+    maxW = Math.max(maxW, r.pages.reduce((s, p) => s + p.w, 0));
+    maxH = Math.max(maxH, ...r.pages.map(p => p.h));
+    maxGap = Math.max(maxGap, (r.pages.length - 1) * GAP);
+  }
+  const vr = viewer.getBoundingClientRect();
+  const a = paged ? null : anchorAt(vr.left + vr.width / 2, vr.top + 8);
+  let z = (viewer.clientWidth - (paged && S.mode !== 'phone' ? 144 : 48) - maxGap) / maxW;
+  if (prefs.view.fit === 'page') z = Math.min(z, (viewer.clientHeight - 56) / maxH);
+  S.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z));
+  S.fit = true;
+  layout();
+  if (a) { const r = a.pg.el.getBoundingClientRect(); viewer.scrollTop += r.top + a.uy * S.zoom - (vr.top + 8); }
+  viewer.scrollLeft = 0;
+  scheduleRender(60);
+}
+$('#zoomIn').onclick = () => setZoom(S.zoom * 1.25);
+$('#zoomOut').onclick = () => setZoom(S.zoom / 1.25);
+$('#fitBtn').onclick = fitWidth;
+let wheelAcc = 0, wheelLock = 0;
+viewer.addEventListener('wheel', e => {
+  if (!e.ctrlKey) {
+    // one-at-a-time view: scrolling past the page edge turns the page
+    if (prefs.view.flow !== 'paged') return;
+    const atBottom = viewer.scrollTop + viewer.clientHeight >= viewer.scrollHeight - 2, atTop = viewer.scrollTop <= 0;
+    if (!((e.deltaY > 0 && atBottom) || (e.deltaY < 0 && atTop))) { wheelAcc = 0; return; }
+    e.preventDefault();
+    if (performance.now() < wheelLock) return;
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) > 60) { flip(Math.sign(wheelAcc)); wheelAcc = 0; wheelLock = performance.now() + 450; }
+    return;
+  }
+  e.preventDefault();
+  setZoom(S.zoom * Math.exp(-e.deltaY * 0.0022), e.clientX, e.clientY);
+}, { passive: false });
+let resizeTimer = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { applyMode(); if (S.fit) fitWidth(); else scheduleRender(); }, 150);
+});
+
+let scrollRaf = 0;
+viewer.addEventListener('scroll', () => {
+  if (scrollRaf) return;
+  scrollRaf = requestAnimationFrame(() => { scrollRaf = 0; trackPage(); });
+});
+function trackPage() {
+  if (!S.rows.length) return;
+  let ri;
+  if (prefs.view.flow === 'paged') ri = S.rowIdx;
+  else {
+    const target = viewer.scrollTop + viewer.clientHeight * 0.4;
+    let lo = 0, hi = S.rows.length - 1;
+    while (lo < hi) { const m = (lo + hi + 1) >> 1; if (S.rows[m].el.offsetTop <= target) lo = m; else hi = m - 1; }
+    ri = lo;
+  }
+  const row = S.rows[ri].pages, n = row[0].n, last = row[row.length - 1].n;
+  $('#hud').textContent = (last > n ? n + '–' + last : n) + ' / ' + S.pages.length + '쪽';
+  if (document.activeElement !== $('#jumpIn')) $('#jumpIn').value = n;
+  if (n !== S.cur) {
+    S.cur = n;
+    if (document.activeElement !== $('#memoText')) { S.memoPage = n; showMemo(); }
+    markThumb();
+    if (sideOpen('marks')) renderMarkBtn();
+    scheduleRender(150);
+  }
+}
+function goToPage(n, offset = 0) {
+  n = Math.max(1, Math.min(S.pages.length, n));
+  const pg = S.pages[n - 1]; if (!pg) return;
+  if (prefs.view.flow === 'paged') { setRow(pg.row); return; }
+  viewer.scrollTop = pg.el.offsetTop - 10 + offset;
+}
+
+// ---------- pointer input ----------
+// pen / mouse always write; fingers scroll and pinch unless "손가락 필기" is on (then one finger writes, two scroll)
+const touches = new Map();
+let act = null, pan = null, pinch = null, inertia = 0;
+
+function ptOn(pg, e) {
+  const r = pg.el.getBoundingClientRect();
+  const pr = e.pointerType === 'pen' ? (e.pressure || 0.5) : 0.5;
+  return [Math.round((e.clientX - r.left) / S.zoom * 100) / 100, Math.round((e.clientY - r.top) / S.zoom * 100) / 100, Math.round(pr * 100) / 100];
+}
+function pageFromEvent(e) {
+  const el = e.target.closest && e.target.closest('.page');
+  if (el) return S.pages[+el.dataset.n - 1];
+  return null;
+}
+function stopInertia() { cancelAnimationFrame(inertia); inertia = 0; }
+
+viewer.addEventListener('contextmenu', e => e.preventDefault());
+viewer.addEventListener('pointerdown', e => {
+  if (e.target.closest('.text-editor, .memo-tab')) return;
+  stopInertia();
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, { x: e.clientX, y: e.clientY, t: performance.now() });
+    try { viewer.setPointerCapture(e.pointerId); } catch (_) {}
+    if (touches.size >= 2) { cancelAct(); pan = null; startPinch(); return; }
+    if (E) { commitEditor(); startPan(e); return; }
+    if (prefs.fingerDraw && prefs.tool !== 'hand') beginTool(e, true); else startPan(e);
+    return;
+  }
+  if (e.pointerType === 'mouse' && e.button === 1) { e.preventDefault(); startPan(e); viewer.setPointerCapture(e.pointerId); return; }
+  if (e.button !== 0 && !(e.pointerType === 'pen' && (e.button === 2 || e.button === 5))) return;
+  e.preventDefault();
+  if (E) { commitEditor(); return; }
+  try { viewer.setPointerCapture(e.pointerId); } catch (_) {}
+  if (prefs.tool === 'hand') { startPan(e); return; }
+  beginTool(e, false);
+});
+
+function beginTool(e, isTouch) {
+  const pg = pageFromEvent(e);
+  if (!pg) { if (isTouch) startPan(e); return; }
+  const sideButton = e.pointerType === 'pen' && (e.button === 2 || e.button === 5 || (e.buttons & 34));
+  const tool = sideButton ? 'eraser' : prefs.tool;
+  const pt = ptOn(pg, e);
+  const base = { id: e.pointerId, pg, before: listOf(pg.n).slice(), touch: isTouch, start: pt };
+  if (tool === 'eraser') { act = { ...base, kind: 'erase', changed: false }; eraseAt(e); return; }
+  if (tool === 'pen' || tool === 'hl') {
+    const s = { t: tool, c: prefs.color[tool], w: prefs.width[tool], p: pt };
+    listOf(pg.n).push(s);
+    act = { ...base, kind: 'stroke', item: s };
+    inkCtx(pg); if (tool === 'hl') drawInk(pg);
+    return;
+  }
+  if (tool === 'shape') {
+    const it = { t: 'shape', k: prefs.shape, c: prefs.color.shape, w: prefs.width.shape, a: [pt[0], pt[1], pt[0], pt[1]] };
+    listOf(pg.n).push(it);
+    act = { ...base, kind: 'shape', item: it };
+    return;
+  }
+  if (tool === 'text') {
+    const hit = textAt(pg, pt[0], pt[1]);
+    act = { ...base, kind: 'text', item: hit, moved: false };
+  }
+}
+function moveAct(e) {
+  const pg = act.pg;
+  if (act.kind === 'stroke') {
+    const s = act.item, ctx = inkCtx(pg);
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    for (const ev of (evs.length ? evs : [e])) {
+      const q = ptOn(pg, ev), p = s.p, L = p.length;
+      if (Math.hypot(q[0] - p[L - 3], q[1] - p[L - 2]) < 0.6 / S.zoom) continue;
+      p.push(q[0], q[1], q[2]);
+      const n = p.length / 3;
+      if (s.t === 'pen') penSegment(ctx, s, n === 2 ? 0 : n - 2, false);
+    }
+    if (s.t === 'hl') drawInk(pg);
+  } else if (act.kind === 'erase') eraseAt(e);
+  else if (act.kind === 'shape') {
+    const q = ptOn(pg, e); act.item.a[2] = q[0]; act.item.a[3] = q[1]; drawInk(pg);
+  } else if (act.kind === 'text' && act.item) {
+    const q = ptOn(pg, e), dx = q[0] - act.start[0], dy = q[1] - act.start[1];
+    if (!act.moved && Math.hypot(dx, dy) < 4 / S.zoom) return;
+    act.moved = true;
+    const list = listOf(pg.n), i = list.indexOf(act.cur || act.item);
+    const moved = { ...act.item, x: act.item.x + dx, y: act.item.y + dy };
+    if (i >= 0) list[i] = moved; act.cur = moved;
+    drawInk(pg);
+  }
+}
+function endAct(cancelled) {
+  const a = act; act = null;
+  const pg = a.pg;
+  if (cancelled) { S.ann.pages[pg.n] = a.before; drawInk(pg); return; }
+  if (a.kind === 'stroke') {
+    if (a.item.t === 'pen' && a.item.p.length > 3) penSegment(inkCtx(pg), a.item, 0, true);
+    drawInk(pg); pushAction(pg.n, a.before);
+  } else if (a.kind === 'erase') {
+    if (a.changed) pushAction(pg.n, a.before);
+  } else if (a.kind === 'shape') {
+    const [x1, y1, x2, y2] = a.item.a;
+    if (Math.hypot(x2 - x1, y2 - y1) < 3) { S.ann.pages[pg.n] = a.before; drawInk(pg); }
+    else pushAction(pg.n, a.before);
+  } else if (a.kind === 'text') {
+    if (a.moved) pushAction(pg.n, a.before);
+    else openEditor(pg, a.item, a.start);
+  }
+}
+function cancelAct() { if (act) endAct(true); }
+
+function distSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+  let t = l ? ((px - ax) * dx + (py - ay) * dy) / l : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - ax - t * dx, py - ay - t * dy);
+}
+function hitItem(it, x, y, r) {
+  if (it.t === 'text') return x >= it.x - r && x <= it.x + it.bw + r && y >= it.y - r && y <= it.y + it.bh + r;
+  if (it.t === 'shape') {
+    for (const path of shapePaths(it)) for (let k = 0; k < path.length - 1; k++)
+      if (distSeg(x, y, path[k][0], path[k][1], path[k + 1][0], path[k + 1][1]) < r + it.w / 2) return true;
+    return false;
+  }
+  const p = it.p, n = p.length / 3, lim = r + it.w / 2;
+  if (n === 1) return Math.hypot(x - p[0], y - p[1]) < lim;
+  for (let k = 0; k < n - 1; k++) if (distSeg(x, y, p[k * 3], p[k * 3 + 1], p[k * 3 + 3], p[k * 3 + 4]) < lim) return true;
+  return false;
+}
+function eraseAt(e) {
+  const pg = act.pg, list = listOf(pg.n);
+  const [x, y] = ptOn(pg, e), r = 9 / S.zoom;
+  let hit = false;
+  for (let i = list.length - 1; i >= 0; i--) if (hitItem(list[i], x, y, r)) { list.splice(i, 1); hit = true; }
+  if (hit) { act.changed = true; drawInk(pg); }
+}
+function textAt(pg, x, y) {
+  const list = S.ann.pages[pg.n] || [];
+  for (let i = list.length - 1; i >= 0; i--) if (list[i].t === 'text' && hitItem(list[i], x, y, 4 / S.zoom)) return list[i];
+  return null;
+}
+
+function startPan(e) { pan = { id: e.pointerId, x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, t0: performance.now(), vx: 0, vy: 0, t: performance.now(), e }; }
+function startPinch() {
+  const [a, b] = [...touches.values()];
+  const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y) || 1, z0: S.zoom, anchor: anchorAt(mx, my) };
+}
+
+viewer.addEventListener('pointermove', e => {
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) { const t = touches.get(e.pointerId); t.x = e.clientX; t.y = e.clientY; }
+  if (pinch && touches.size >= 2) {
+    const [a, b] = [...touches.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    setZoom(pinch.z0 * d / pinch.d0, (a.x + b.x) / 2, (a.y + b.y) / 2, pinch.anchor);
+    return;
+  }
+  if (act && act.id === e.pointerId) { e.preventDefault(); moveAct(e); return; }
+  if (pan && pan.id === e.pointerId) {
+    const now = performance.now(), dx = e.clientX - pan.x, dy = e.clientY - pan.y, dt = Math.max(1, now - pan.t);
+    viewer.scrollLeft -= dx; viewer.scrollTop -= dy;
+    pan.vx = 0.8 * (dx / dt) + 0.2 * pan.vx; pan.vy = 0.8 * (dy / dt) + 0.2 * pan.vy;
+    pan.x = e.clientX; pan.y = e.clientY; pan.t = now;
+  }
+});
+function pointerEnd(e) {
+  if (e.pointerType === 'touch') touches.delete(e.pointerId);
+  if (pinch) {
+    if (touches.size < 2) {
+      pinch = null;
+      const rest = [...touches.entries()][0];
+      if (rest) pan = { id: rest[0], x: rest[1].x, y: rest[1].y, sx: 1e9, sy: 1e9, t0: 0, vx: 0, vy: 0, t: performance.now() };
+    }
+    return;
+  }
+  if (act && act.id === e.pointerId) { endAct(e.type === 'pointercancel'); return; }
+  if (pan && pan.id === e.pointerId) {
+    const p = pan; pan = null;
+    // a quick finger tap with the text tool places or edits a text box
+    if (e.type === 'pointerup' && prefs.tool === 'text' && Math.hypot(e.clientX - p.sx, e.clientY - p.sy) < 10 && performance.now() - p.t0 < 500) {
+      const pg = pageFromEvent(p.e || e);
+      if (pg) { const pt = ptOn(pg, e); openEditor(pg, textAt(pg, pt[0], pt[1]), pt); }
+      return;
+    }
+    // one-at-a-time view: a sideways swipe turns the page
+    if (e.type === 'pointerup' && prefs.view.flow === 'paged' && p.t0 > 0) {
+      const dx = e.clientX - p.sx, dy = e.clientY - p.sy;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && viewer.scrollWidth <= viewer.clientWidth + 2) { flip(dx < 0 ? 1 : -1); return; }
+    }
+    let { vx, vy } = p;
+    if (performance.now() - p.t > 80 || Math.hypot(vx, vy) < 0.15) return;
+    let last = performance.now();
+    const step = now => {
+      const dt = now - last; last = now;
+      viewer.scrollLeft -= vx * dt; viewer.scrollTop -= vy * dt;
+      const decay = Math.pow(0.995, dt); vx *= decay; vy *= decay;
+      inertia = Math.hypot(vx, vy) > 0.02 ? requestAnimationFrame(step) : 0;
+    };
+    inertia = requestAnimationFrame(step);
+  }
+}
+viewer.addEventListener('pointerup', pointerEnd);
+viewer.addEventListener('pointercancel', pointerEnd);
+
+// ---------- text boxes ----------
+let E = null;   // open text editor: { pg, item, x, y, c, s, ta }
+function openEditor(pg, item, pt) {
+  if (E) commitEditor();
+  const ta = document.createElement('textarea');
+  ta.className = 'text-editor'; ta.spellcheck = false; ta.setAttribute('aria-label', '텍스트 입력');
+  E = item
+    ? { pg, item, x: item.x, y: item.y, c: item.c, s: item.s, ta }
+    : { pg, item: null, x: pt[0], y: pt[1] - prefs.width.text * LH / 2, c: prefs.color.text, s: prefs.width.text, ta };
+  ta.value = item ? item.text : '';
+  ta.addEventListener('input', styleEditor);
+  ta.addEventListener('keydown', ev => {
+    if (ev.key === 'Escape' || (ev.key === 'Enter' && (ev.ctrlKey || ev.metaKey))) { ev.preventDefault(); commitEditor(); }
+  });
+  ta.addEventListener('blur', () => setTimeout(() => { if (E && E.ta === ta && document.activeElement !== ta) commitEditor(); }, 120));
+  pg.el.appendChild(ta);
+  if (prefs.tool !== 'text') { prefs.tool = 'text'; }
+  renderToolbar(); styleEditor(); drawInk(pg);
+  ta.focus({ preventScroll: true });
+  if (item) ta.setSelectionRange(ta.value.length, ta.value.length);
+}
+function styleEditor() {
+  if (!E) return;
+  const { ta, s, c } = E, z = S.zoom;
+  const m = measureText({ text: ta.value || ' ', s });
+  ta.style.left = (E.x * z - 1.5) + 'px'; ta.style.top = (E.y * z - 1.5) + 'px';
+  ta.style.fontSize = s * z + 'px'; ta.style.color = c;
+  ta.style.width = Math.max(m.bw * z + s * z, 60) + 'px';
+  ta.style.height = m.bh * z + 'px';
+}
+function commitEditor() {
+  if (!E) return;
+  const { pg, item, ta } = E;
+  const text = ta.value.replace(/\s+$/, '');
+  const list = listOf(pg.n), before = list.slice();
+  let changed = false;
+  if (item) {
+    const i = list.indexOf(item);
+    if (!text) { if (i >= 0) list.splice(i, 1); changed = true; }
+    else if (text !== item.text || E.c !== item.c || E.s !== item.s) {
+      const it = { t: 'text', x: E.x, y: E.y, c: E.c, s: E.s, text };
+      Object.assign(it, measureText(it));
+      if (i >= 0) list[i] = it; changed = true;
+    }
+  } else if (text) {
+    const it = { t: 'text', x: E.x, y: E.y, c: E.c, s: E.s, text };
+    Object.assign(it, measureText(it)); list.push(it); changed = true;
+  }
+  ta.remove(); E = null;
+  drawInk(pg); renderToolbar();
+  if (changed) pushAction(pg.n, before);
+}
+
+// ---------- page thumbnails and page editing ----------
+let thumbIO = null, thumbQueue = [], thumbBusy = false;
+function buildThumbs() {
+  if (thumbIO) thumbIO.disconnect();
+  const box = $('#thumbList'); box.replaceChildren();
+  thumbIO = new IntersectionObserver(ents => {
+    for (const en of ents) if (en.isIntersecting) { const n = +en.target.dataset.n; if (!thumbQueue.includes(n)) thumbQueue.push(n); }
+    scheduleThumbs();
+  }, { root: box, rootMargin: '200px 0px' });
+  for (const pg of S.pages) {
+    const b = document.createElement('button'); b.className = 'thumb'; b.dataset.n = pg.n;
+    const c = document.createElement('canvas'); c.style.aspectRatio = pg.w + ' / ' + pg.h;
+    const dot = document.createElement('span'); dot.className = 'dot'; dot.hidden = !(S.ann.memos[pg.n] || '').trim();
+    b.append(c, document.createTextNode(pg.n + '')); b.appendChild(dot);
+    b.onclick = () => { goToPage(pg.n); if (S.mode === 'phone') togglePanel('thumbs', false); };
+    box.appendChild(b); thumbIO.observe(b);
+  }
+  $('#jumpTotal').textContent = '/ ' + S.pages.length + '쪽';
+  $('#jumpIn').max = S.pages.length;
+  markThumb();
+}
+$('#jumpIn').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+$('#jumpIn').addEventListener('change', e => {
+  const n = parseInt(e.target.value, 10);
+  if (n >= 1 && n <= S.pages.length) { goToPage(n); if (S.mode === 'phone') togglePanel('thumbs', false); }
+  else { e.target.value = S.cur; toast('1에서 ' + S.pages.length + ' 사이의 쪽 번호를 넣어 주세요.'); }
+});
+
+function listItem(k, text, n, onclick) {
+  const b = document.createElement('button'); b.className = 'li';
+  if (k != null) { const s = document.createElement('span'); s.className = 'k'; s.textContent = k; b.appendChild(s); }
+  const t = document.createElement('span'); t.className = 't'; t.textContent = text; b.appendChild(t);
+  if (n != null) { const p = document.createElement('span'); p.className = 'pn'; p.textContent = n; b.appendChild(p); }
+  b.onclick = onclick || (() => { goToPage(n); if (S.mode === 'phone') togglePanel('thumbs', false); });
+  return b;
+}
+function emptyNote(box, text) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = text; box.appendChild(d); }
+
+// table of contents stored in the PDF
+async function loadOutline(pdf) {
+  const out = [];
+  let ol = null;
+  try { ol = await pdf.getOutline(); } catch (e) {}
+  async function walk(list, depth) {
+    for (const it of list || []) {
+      if (out.length > 3000) return;
+      let n = null;
+      try {
+        let dest = it.dest;
+        if (typeof dest === 'string') dest = await pdf.getDestination(dest);
+        if (Array.isArray(dest)) {
+          const ref = dest[0];
+          n = ref && typeof ref === 'object' ? (await pdf.getPageIndex(ref)) + 1 : Number.isInteger(ref) ? ref + 1 : null;
+        }
+      } catch (e) {}
+      out.push({ title: (it.title || '').trim() || '(제목 없음)', n, depth });
+      await walk(it.items, depth + 1);
+    }
+  }
+  await walk(ol, 0);
+  return out;
+}
+async function renderOutline() {
+  const box = $('#outlineList'), pdf = S.pdf;
+  if (!pdf) return;
+  if (!S.outlineP) S.outlineP = loadOutline(pdf);
+  const items = await S.outlineP;
+  if (S.pdf !== pdf) return;
+  box.replaceChildren();
+  if (!items.length) { emptyNote(box, '이 PDF에는 목차(책갈피)가 없어요. 북마크 탭에서 내가 자주 보는 쪽을 따로 모을 수 있어요.'); return; }
+  for (const it of items) {
+    const b = listItem(null, it.title, it.n, it.n ? null : () => toast('이 항목은 연결된 쪽이 없어요.'));
+    b.style.paddingLeft = (10 + it.depth * 14) + 'px';
+    if (it.depth === 0) b.style.fontWeight = '500';
+    box.appendChild(b);
+  }
+}
+
+// my bookmarks
+function renderMarkBtn() {
+  const on = S.ann.marks.includes(S.cur);
+  $('#markBtn').textContent = (on ? '★ ' : '☆ ') + S.cur + '쪽 ' + (on ? '북마크 해제' : '북마크하기');
+}
+function toggleMark(n = S.cur) {
+  const m = S.ann.marks, i = m.indexOf(n);
+  if (i >= 0) m.splice(i, 1); else { m.push(n); m.sort((a, b) => a - b); }
+  persistSoon(); toast(i >= 0 ? n + '쪽 북마크를 지웠어요.' : n + '쪽을 북마크했어요.');
+  if (sideOpen('marks')) renderMarks();
+}
+$('#markBtn').onclick = () => toggleMark();
+function renderMarks() {
+  renderMarkBtn();
+  const box = $('#markList'); box.replaceChildren();
+  if (!S.ann.marks.length) { emptyNote(box, '자주 보는 쪽에서 위 버튼을 누르면 여기에 모여요. PC에서는 B 키로도 돼요.'); return; }
+  for (const n of S.ann.marks) {
+    const memo = (S.ann.memos[n] || '').replace(/\s+/g, ' ').trim();
+    box.appendChild(listItem(n + '쪽', memo || '북마크', null, () => { goToPage(n); if (S.mode === 'phone') togglePanel('thumbs', false); }));
+  }
+}
+
+// every drawing, text box and shape, page by page
+function renderAnnots() {
+  const box = $('#annotList'); box.replaceChildren();
+  const KIND = { rect: '사각형', ellipse: '원', line: '직선', arrow: '화살표' };
+  const nums = Object.keys(S.ann.pages).map(Number).filter(n => (S.ann.pages[n] || []).length).sort((a, b) => a - b);
+  if (!nums.length) { emptyNote(box, '아직 필기나 주석이 없어요. 펜·형광펜·텍스트·도형으로 표시하면 쪽별로 여기에 모여요.'); return; }
+  for (const n of nums) {
+    const list = S.ann.pages[n], count = { pen: 0, hl: 0 }, shapes = {};
+    for (const it of list) {
+      if (it.t === 'text') box.appendChild(listItem(n + '쪽', '텍스트 · ' + it.text.replace(/\s+/g, ' '), null, () => goToPage(n)));
+      else if (it.t === 'shape') shapes[it.k] = (shapes[it.k] || 0) + 1;
+      else count[it.t]++;
+    }
+    const parts = [];
+    if (count.pen) parts.push('펜 ' + count.pen);
+    if (count.hl) parts.push('형광펜 ' + count.hl);
+    for (const k in shapes) parts.push(KIND[k] + ' ' + shapes[k]);
+    if (parts.length) box.appendChild(listItem(n + '쪽', parts.join(' · '), null, () => goToPage(n)));
+  }
+}
+function markThumb() {
+  document.querySelectorAll('.thumb').forEach(t => {
+    const on = +t.dataset.n === S.cur;
+    t.setAttribute('aria-current', String(on));
+    if (on && !$('#thumbs').hidden) {
+      const box = $('#thumbList'), r = t.getBoundingClientRect(), br = box.getBoundingClientRect();
+      if (r.top < br.top || r.bottom > br.bottom) box.scrollTop += r.top - br.top - 40;
+    }
+  });
+}
+function scheduleThumbs() { if (!thumbBusy) setTimeout(runThumbs, 30); }
+async function runThumbs() {
+  if (thumbBusy || $('#thumbs').hidden) return;
+  thumbBusy = true;
+  try {
+    while (thumbQueue.length) {
+      const n = thumbQueue.shift(), b = document.querySelector('.thumb[data-n="' + n + '"]');
+      if (!b || b.dataset.done) continue;
+      const pdf = S.pdf, page = await pdf.getPage(n), v1 = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: 150 * dpr() / v1.width });
+      const c = b.querySelector('canvas'); c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
+      try { await page.render({ canvasContext: c.getContext('2d', { alpha: false }), viewport: vp }).promise; b.dataset.done = '1'; } catch (e) {}
+      if (S.pdf !== pdf) break;
+    }
+  } finally { thumbBusy = false; }
+}
+
+function remapPages(fn) {
+  const pages = {}, memos = {};
+  for (const k in S.ann.pages) { const m = fn(+k); if (m) pages[m] = S.ann.pages[k]; }
+  for (const k in S.ann.memos) { const m = fn(+k); if (m) memos[m] = S.ann.memos[k]; }
+  S.ann.pages = pages; S.ann.memos = memos;
+  S.ann.marks = (S.ann.marks || []).map(fn).filter(Boolean);
+}
+function rotateItems(n, H) {
+  // page turns 90° clockwise: (x, y) -> (H - y, x)
+  S.ann.pages[n] = (S.ann.pages[n] || []).map(it => {
+    if (it.t === 'text') return { ...it, x: H - it.y - it.bh, y: it.x };
+    if (it.t === 'shape') return { ...it, a: [H - it.a[1], it.a[0], H - it.a[3], it.a[2]] };
+    const p = it.p.slice();
+    for (let i = 0; i < p.length; i += 3) { const x = p[i], y = p[i + 1]; p[i] = H - y; p[i + 1] = x; }
+    return { ...it, p };
+  });
+}
+let deleteArmed = 0;
+async function pageOp(kind) {
+  if (!S.bytes || !S.pages.length) return;
+  if (E) commitEditor();
+  const n = S.cur, pg = S.pages[n - 1];
+  if (kind === 'delete') {
+    if (S.pages.length === 1) { toast('페이지가 하나뿐이라 삭제할 수 없어요.'); return; }
+    if (!deleteArmed) {
+      deleteArmed = setTimeout(() => { deleteArmed = 0; $('#opDelete').lastChild.textContent = '삭제'; }, 3000);
+      $('#opDelete').lastChild.textContent = '한 번 더';
+      toast(n + '쪽을 지우려면 삭제를 한 번 더 누르세요.');
+      return;
+    }
+    clearTimeout(deleteArmed); deleteArmed = 0; $('#opDelete').lastChild.textContent = '삭제';
+  }
+  busy('페이지를 고치는 중…');
+  try {
+    const { PDFDocument, degrees } = PDFLib;
+    const doc = await PDFDocument.load(S.bytes.slice(), { ignoreEncryption: true, updateMetadata: false });
+    let goto = n;
+    if (kind === 'rotate') {
+      const p = doc.getPage(n - 1);
+      p.setRotation(degrees((p.getRotation().angle + 90) % 360));
+      rotateItems(n, pg.h);
+    } else if (kind === 'add') {
+      const { width, height } = doc.getPage(n - 1).getSize();
+      doc.insertPage(n, [width, height]);
+      remapPages(k => k > n ? k + 1 : k);
+      goto = n + 1;
+    } else if (kind === 'delete') {
+      doc.removePage(n - 1);
+      remapPages(k => k === n ? 0 : k > n ? k - 1 : k);
+      goto = Math.min(n, S.pages.length - 1);
+    }
+    const bytes = await doc.save();
+    const pdf = await loadPdf(bytes);
+    S.undo = []; S.redo = []; updateUndo();
+    await showPdf(pdf, bytes, { page: goto, fit: S.fit });
+    await idb.set('bytes:' + S.key, bytes.slice().buffer);
+    persistSoon();
+    toast(kind === 'rotate' ? n + '쪽을 돌렸어요.' : kind === 'add' ? (n + 1) + '쪽에 빈 페이지를 넣었어요.' : n + '쪽을 지웠어요.');
+  } catch (e) { console.error(e); toast('페이지를 고치지 못했어요. 보호된 문서일 수 있어요.'); }
+  finally { busy(''); }
+}
+$('#opAdd').onclick = () => pageOp('add');
+$('#opRotate').onclick = () => pageOp('rotate');
+$('#opDelete').onclick = () => pageOp('delete');
+
+// ---------- search ----------
+const textCache = new Map();
+let hits = [], hitIdx = -1, lastQuery = '', searchToken = 0;
+async function pageText(n) {
+  if (!textCache.has(n)) {
+    const page = await S.pdf.getPage(n), tc = await page.getTextContent();
+    let str = ''; const map = [];
+    for (const it of tc.items) {
+      if (!('str' in it)) continue;
+      map.push({ start: str.length, it });
+      str += it.str;
+      if (it.hasEOL) str += '\n';
+    }
+    textCache.set(n, { str, low: str.toLowerCase(), map });
+  }
+  return textCache.get(n);
+}
+function openSearch() { $('#searchbar').hidden = false; const q = $('#q'); q.focus(); q.select(); }
+function clearSearch(keepBar) {
+  searchToken++; hits = []; hitIdx = -1; lastQuery = '';
+  document.querySelectorAll('.hits').forEach(h => h.remove());
+  for (const pg of S.pages) pg.hits = null;
+  $('#qCount').textContent = '';
+  if (!keepBar) $('#searchbar').hidden = true;
+}
+async function runSearch(q) {
+  clearSearch(true);
+  q = q.trim(); if (!q || !S.pdf) return;
+  lastQuery = q; const token = searchToken, low = q.toLowerCase();
+  for (const pg of S.pages) {
+    if (token !== searchToken) return;
+    $('#qCount').textContent = '찾는 중 ' + pg.n + '/' + S.pages.length;
+    let t; try { t = await pageText(pg.n); } catch (e) { continue; }
+    let i = t.low.indexOf(low);
+    while (i >= 0) {
+      const rects = hitRects(pg, t, i, i + low.length);
+      if (rects.length) hits.push({ n: pg.n, rects });
+      i = t.low.indexOf(low, i + low.length);
+    }
+  }
+  if (token !== searchToken) return;
+  for (const h of hits) {
+    const pg = S.pages[h.n - 1];
+    if (!pg.hits) { pg.hits = document.createElement('div'); pg.hits.className = 'hits'; pg.el.appendChild(pg.hits); }
+    h.els = h.rects.map(r => {
+      const d = document.createElement('div'); d.className = 'hit';
+      Object.assign(d.style, { left: r[0] / pg.w * 100 + '%', top: r[1] / pg.h * 100 + '%', width: (r[2] - r[0]) / pg.w * 100 + '%', height: (r[3] - r[1]) / pg.h * 100 + '%' });
+      pg.hits.appendChild(d); return d;
+    });
+  }
+  if (!hits.length) { $('#qCount').textContent = '결과 없음'; return; }
+  const first = hits.findIndex(h => h.n >= S.cur);
+  showHit(first < 0 ? 0 : first);
+}
+function hitRects(pg, t, a, b) {
+  const out = [];
+  for (const { start, it } of t.map) {
+    const end = start + it.str.length;
+    if (end <= a || start >= b || !it.str.length) continue;
+    const s0 = Math.max(a, start) - start, s1 = Math.min(b, end) - start;
+    const tx = it.transform, fh = Math.hypot(tx[2], tx[3]) || 10;
+    const len = it.str.length, ux = tx[0] / (Math.hypot(tx[0], tx[1]) || 1), uy = tx[1] / (Math.hypot(tx[0], tx[1]) || 1);
+    const w0 = it.width * s0 / len, w1 = it.width * s1 / len;
+    // corners in PDF space along the text direction, then into page view space
+    const pts = [[w0, -0.22 * fh], [w1, -0.22 * fh], [w0, 0.9 * fh], [w1, 0.9 * fh]].map(([dx, dy]) =>
+      pg.vp.convertToViewportPoint(tx[4] + dx * ux - dy * uy, tx[5] + dx * uy + dy * ux));
+    const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+    out.push([Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]);
+  }
+  return out;
+}
+function showHit(i) {
+  if (!hits.length) return;
+  if (hits[hitIdx]) hits[hitIdx].els.forEach(e => e.classList.remove('cur'));
+  hitIdx = (i + hits.length) % hits.length;
+  const h = hits[hitIdx], pg = S.pages[h.n - 1];
+  h.els.forEach(e => e.classList.add('cur'));
+  $('#qCount').textContent = (hitIdx + 1) + ' / ' + hits.length;
+  const r = h.rects[0];
+  if (prefs.view.flow === 'paged' && pg.row !== S.rowIdx) goToPage(h.n);
+  viewer.scrollTop = pg.el.offsetTop + r[1] * S.zoom - viewer.clientHeight * 0.3;
+  const x = pg.el.offsetLeft + r[0] * S.zoom;
+  if (x < viewer.scrollLeft || x > viewer.scrollLeft + viewer.clientWidth - 40) viewer.scrollLeft = x - viewer.clientWidth * 0.3;
+}
+$('#searchBtn').onclick = () => { if ($('#searchbar').hidden) openSearch(); else clearSearch(); };
+$('#q').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); if (e.target.value.trim() === lastQuery && hits.length) showHit(hitIdx + (e.shiftKey ? -1 : 1)); else runSearch(e.target.value); }
+  else if (e.key === 'Escape') clearSearch();
+});
+$('#qNext').onclick = () => { const v = $('#q').value.trim(); if (v !== lastQuery) runSearch(v); else showHit(hitIdx + 1); };
+$('#qPrev').onclick = () => { const v = $('#q').value.trim(); if (v !== lastQuery) runSearch(v); else showHit(hitIdx - 1); };
+$('#qClose').onclick = () => clearSearch();
+
+// ---------- memos ----------
+function showMemo() {
+  const n = S.memoPage, total = S.pages.length || 1;
+  $('#memoTitle').textContent = n + '쪽 메모';
+  const ta = $('#memoText'), v = S.ann.memos[n] || '';
+  if (ta.value !== v) ta.value = v;
+  $('#memoCount').textContent = v.length + '자';
+  $('#memoPrev').disabled = n <= 1; $('#memoNext').disabled = n >= total;
+  renderMemoList();
+}
+let listTimer = 0;
+$('#memoText').addEventListener('input', e => {
+  const n = S.memoPage, v = e.target.value;
+  if (v.trim()) S.ann.memos[n] = v; else delete S.ann.memos[n];
+  $('#memoCount').textContent = v.length + '자';
+  const pg = S.pages[n - 1]; if (pg) pg.tab.hidden = !v.trim();
+  const dot = document.querySelector('.thumb[data-n="' + n + '"] .dot'); if (dot) dot.hidden = !v.trim();
+  persistSoon();
+  clearTimeout(listTimer); listTimer = setTimeout(renderMemoList, 300);
+});
+$('#memoPrev').onclick = () => { if (S.memoPage > 1) { S.memoPage--; goToPage(S.memoPage); showMemo(); } };
+$('#memoNext').onclick = () => { if (S.memoPage < S.pages.length) { S.memoPage++; goToPage(S.memoPage); showMemo(); } };
+function memoPages() { return Object.keys(S.ann.memos).map(Number).filter(n => (S.ann.memos[n] || '').trim()).sort((a, b) => a - b); }
+function renderMemoList() {
+  const box = $('#memoList'); box.replaceChildren();
+  const nums = memoPages();
+  if (!nums.length) {
+    const d = document.createElement('div'); d.className = 'memo-empty';
+    d.textContent = '아직 메모가 없어요. 위 노란 칸에 쓰면 이 목록에 페이지별로 모여요.';
+    box.appendChild(d); return;
+  }
+  for (const n of nums) {
+    const b = document.createElement('button'); b.className = 'memo-item';
+    if (n === S.memoPage) b.setAttribute('aria-current', 'true');
+    const bn = document.createElement('b'); bn.textContent = n + '쪽';
+    const sp = document.createElement('span'); sp.textContent = S.ann.memos[n].replace(/\s+/g, ' ').trim();
+    b.append(bn, sp);
+    b.onclick = () => { S.memoPage = n; goToPage(n); showMemo(); };
+    box.appendChild(b);
+  }
+}
+function memoText() {
+  return S.name + ' — 페이지 메모\n\n' + memoPages().map(n => '[' + n + '쪽]\n' + S.ann.memos[n].trim() + '\n').join('\n');
+}
+
+// ---------- saving ----------
+const downloadsP = (window.claude && window.claude.use) ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+async function offerFile(filename, data) {
+  const dl = await downloadsP;
+  if (dl) {
+    try { await dl.save({ filename, data }); toast('저장했어요. 다운로드 폴더를 확인해 주세요.'); }
+    catch (e) {
+      if (e && e.code === 'declined') return;
+      toast(e && e.code === 'too_large' ? '파일이 너무 커서 저장하지 못했어요.' : '이 화면에서는 파일을 저장할 수 없어요.');
+    }
+    return;
+  }
+  // installed app / plain web page: on PC pick where to save, elsewhere download
+  if (window.showSaveFilePicker) {
+    try {
+      const pdf = /\.pdf$/i.test(filename);
+      const h = await window.showSaveFilePicker({ suggestedName: filename, types: [pdf ? { description: 'PDF', accept: { 'application/pdf': ['.pdf'] } } : { description: '텍스트', accept: { 'text/plain': ['.txt'] } }] });
+      const w = await h.createWritable(); await w.write(data); await w.close();
+      toast('저장했어요.'); return;
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+  }
+  try {
+    const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+    const a = document.createElement('a'); a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (e) { toast('이 화면에서는 파일을 저장할 수 없어요.'); }
+}
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return PDFLib.rgb((n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255); }
+function baseName() { return (S.name || '문서').replace(/\.pdf$/i, ''); }
+function textPng(it) {
+  const K = 4, w = it.bw + 2, h = it.bh;
+  const c = document.createElement('canvas'); c.width = Math.ceil(w * K); c.height = Math.ceil(h * K);
+  const g = c.getContext('2d'); g.scale(K, K); drawText(g, it, 1, 0);
+  return new Promise(r => c.toBlob(b => b.arrayBuffer().then(buf => r({ buf, w: c.width / K, h: c.height / K })), 'image/png'));
+}
+async function buildPdf() {
+  const { PDFDocument, LineCapStyle, BlendMode, PDFName, PDFHexString, PDFDict, degrees } = PDFLib;
+  const doc = await PDFDocument.load(S.bytes.slice(), { ignoreEncryption: true, updateMetadata: false });
+  const pages = doc.getPages();
+  const MARK = PDFName.of('PdfPilgiMemo');
+  for (const pg of S.pages) {
+    const page = pages[pg.n - 1]; if (!page) continue;
+    const P = (x, y) => pg.vp.convertToPdfPoint(x, y);
+    const svg = pts => pts.map(([x, y], i) => { const [u, v] = P(x, y); return (i ? 'L ' : 'M ') + u.toFixed(2) + ' ' + (-v).toFixed(2); }).join(' ');
+    for (const it of S.ann.pages[pg.n] || []) {
+      const color = hexRgb(it.c);
+      if (it.t === 'text') {
+        const { buf, w, h } = await textPng(it);
+        const img = await doc.embedPng(buf);
+        const [bx, by] = P(it.x - 1, it.y + h), [rx, ry] = P(it.x - 1 + w, it.y + h);
+        page.drawImage(img, { x: bx, y: by, width: w, height: h, rotate: degrees(Math.atan2(ry - by, rx - bx) * 180 / Math.PI) });
+      } else if (it.t === 'shape') {
+        for (const path of shapePaths(it)) page.drawSvgPath(svg(path), { x: 0, y: 0, borderColor: color, borderWidth: it.w, borderLineCap: LineCapStyle.Round });
+      } else {
+        const p = it.p, n = p.length / 3;
+        if (it.t === 'hl') {
+          const pts = []; for (let i = 0; i < n; i++) pts.push([p[i * 3], p[i * 3 + 1]]);
+          if (n === 1) pts.push([p[0] + 0.01, p[1]]);
+          page.drawSvgPath(svg(pts), { x: 0, y: 0, borderColor: color, borderWidth: it.w, borderOpacity: HL_ALPHA + 0.07, borderLineCap: LineCapStyle.Round, blendMode: BlendMode.Multiply });
+        } else if (n === 1) {
+          const [x, y] = P(p[0], p[1]);
+          page.drawCircle({ x, y, size: it.w * press(p[2]) / 2, color });
+        } else {
+          for (let i = 0; i < n - 1; i++) {
+            const [x1, y1] = P(p[i * 3], p[i * 3 + 1]), [x2, y2] = P(p[i * 3 + 3], p[i * 3 + 4]);
+            page.drawLine({ start: { x: x1, y: y1 }, end: { x: x2, y: y2 }, thickness: it.w * press((p[i * 3 + 2] + p[i * 3 + 5]) / 2), color, lineCap: LineCapStyle.Round });
+          }
+        }
+      }
+    }
+    // page memo -> sticky-note annotation other PDF apps can show
+    const annots = page.node.Annots();
+    if (annots) for (let i = annots.size() - 1; i >= 0; i--) {
+      const a = annots.lookup(i);
+      if (a instanceof PDFDict && a.get(MARK)) annots.remove(i);
+    }
+    const memo = (S.ann.memos[pg.n] || '').trim();
+    if (memo) {
+      const mb = page.getMediaBox(), x = mb.x + 10, top = mb.y + mb.height - 10;
+      const ref = doc.context.register(doc.context.obj({
+        Type: 'Annot', Subtype: 'Text', Rect: [x, top - 22, x + 22, top], F: 4, Name: 'Comment', Open: false,
+        C: [1, 0.85, 0.3], T: PDFHexString.fromText('페이지 메모'), Contents: PDFHexString.fromText(memo), PdfPilgiMemo: true,
+      }));
+      if (annots) annots.push(ref); else page.node.set(PDFName.of('Annots'), doc.context.obj([ref]));
+    }
+  }
+  try { doc.getInfoDict().set(PDFName.of('PdfPilgiMemos'), PDFHexString.fromText(JSON.stringify(S.ann.memos))); } catch (e) {}
+  return doc.save();
+}
+async function savePdf() {
+  if (!S.bytes) return;
+  if (E) commitEditor();
+  busy('PDF를 만드는 중…');
+  let out;
+  try { out = await buildPdf(); }
+  catch (e) { console.error(e); busy(''); toast('PDF를 만들지 못했어요. 보호된 문서일 수 있어요.'); return; }
+  busy('');
+  await offerFile(baseName() + '_필기.pdf', new Blob([out], { type: 'application/pdf' }));
+}
+$('#saveBtn').onclick = savePdf;$('#memoExport').onclick = () => {
+  $('#pop').hidden = true;
+  if (!memoPages().length) { toast('저장할 메모가 없어요.'); return; }
+  offerFile(baseName() + '_메모.txt', memoText());
+};
+
+// ---------- keyboard (PC) ----------
+window.addEventListener('keydown', e => {
+  const typing = e.target.closest && e.target.closest('textarea, input');
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === 'f') { e.preventDefault(); openSearch(); return; }
+  if (mod && k === 's') { e.preventDefault(); savePdf(); return; }
+  if (mod && k === 'o') { e.preventDefault(); $('#fileIn').click(); return; }
+  if (typing) return;
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+  else if (mod && k === 'y') { e.preventDefault(); redo(); }
+  else if (mod && (k === '=' || k === '+')) { e.preventDefault(); setZoom(S.zoom * 1.25); }
+  else if (mod && k === '-') { e.preventDefault(); setZoom(S.zoom / 1.25); }
+  else if (mod && k === '0') { e.preventDefault(); fitWidth(); }
+  else if (!mod && !e.altKey) {
+    const map = { p: 'pen', h: 'hl', t: 'text', s: 'shape', e: 'eraser', v: 'hand' };
+    if (map[k]) setTool(map[k]);
+    else if (k === 'b') toggleMark();
+    else if (e.key === 'ArrowRight' || e.key === 'PageDown') { if (viewer.scrollWidth <= viewer.clientWidth || e.key === 'PageDown') { e.preventDefault(); flip(1); } }
+    else if (e.key === 'ArrowLeft' || e.key === 'PageUp') { if (viewer.scrollWidth <= viewer.clientWidth || e.key === 'PageUp') { e.preventDefault(); flip(-1); } }
+    else if (e.key === 'Home') { e.preventDefault(); goToPage(1); }
+    else if (e.key === 'End') { e.preventDefault(); goToPage(S.pages.length); }
+    else if (e.key === 'Escape') { if (!$('#searchbar').hidden) clearSearch(); }
+  }
+});
+
+// ---------- sample document (shown until a PDF is opened) ----------
+async function makeSample() {
+  try { await Promise.all([document.fonts.load('700 30px "IBM Plex Sans KR"'), document.fonts.load('400 16px "IBM Plex Sans KR"'), document.fonts.load('500 16px "IBM Plex Sans KR"')]); } catch (e) {}
+  const W = 595, H = 842, K = 3, F = '"IBM Plex Sans KR", "Malgun Gothic", sans-serif';
+  function pageImage(paint) {
+    const c = document.createElement('canvas'); c.width = W * K; c.height = H * K;
+    const g = c.getContext('2d'); g.scale(K, K); g.fillStyle = '#fff'; g.fillRect(0, 0, W, H);
+    paint(g);
+    return new Promise(r => c.toBlob(b => b.arrayBuffer().then(r), 'image/png'));
+  }
+  function wrap(g, text, x, y, maxW, lh) {
+    let line = '';
+    for (const ch of text) {
+      if (g.measureText(line + ch).width > maxW && line) { g.fillText(line, x, y); y += lh; line = ch.trim() ? ch : ''; }
+      else line += ch;
+    }
+    if (line) g.fillText(line, x, y);
+    return y + lh;
+  }
+  const p1 = await pageImage(g => {
+    g.fillStyle = '#2f5bd3'; g.font = '500 11px ' + F; g.fillText('예시 문서', 56, 72);
+    g.fillStyle = '#111827'; g.font = '700 26px ' + F; g.fillText('PDF 필기장 사용 안내', 56, 112);
+    g.fillStyle = '#4b5563'; g.font = '400 12px ' + F;
+    let y = wrap(g, '이 문서는 예시예요. ‘PDF 열기’로 내 파일을 열면 이 화면이 바뀌고, 마지막으로 연 파일은 다음에 자동으로 다시 열려요. ‘보기’에서 연속 보기·한 쪽씩·2쪽 보기, 밤 모드, PC·태블릿·휴대폰 화면을 바꿀 수 있어요.', 56, 146, 483, 20);
+    const items = [
+      ['읽기', '손가락 하나로 넘기고, 두 손가락으로 벌려 확대해요. PC에서는 Ctrl+휠로 확대해요. 확대가 끝나면 그 배율에 맞춰 다시 선명하게 그려요.'],
+      ['필기', 'S펜이나 마우스로 바로 써요. 손가락은 기본으로 넘기기용이고, ‘손가락 필기’를 켜면 손가락 하나로 쓰고 두 손가락으로 넘겨요. 펜을 세게 누를수록 선이 굵어져요.'],
+      ['텍스트·도형', '텍스트 도구로 페이지를 누르면 글상자가 생겨요. 이미 있는 글상자는 누르면 고치고, 끌면 옮겨져요. 도형은 사각형·원·직선·화살표 중에 골라 끌어서 그려요.'],
+      ['지우기', '지우개로 문지르거나, S펜 옆 버튼을 누른 채 문지르면 그 선·도형·글상자가 통째로 지워져요.'],
+      ['페이지', '‘페이지’에서 썸네일로 이동하고, 빈 페이지 추가·회전·삭제를 할 수 있어요. ‘찾기’로 문서 속 글자를 찾아요.'],
+      ['메모', '노란 메모 칸은 페이지마다 따로 저장돼요. 메모가 있는 페이지에는 노란 책갈피가 붙어요.'],
+      ['저장', '‘저장’을 누르면 필기·글상자·도형·메모가 들어간 새 PDF를 받아요. 메모는 다른 PDF 앱에서도 노트 주석으로 보여요.'],
+    ];
+    y += 10;
+    for (const [h, t] of items) {
+      g.fillStyle = '#e5e9f2'; g.fillRect(56, y - 4, 483, 1);
+      g.fillStyle = '#111827'; g.font = '700 13px ' + F; g.fillText(h, 56, y + 20);
+      g.fillStyle = '#374151'; g.font = '400 12px ' + F;
+      y = wrap(g, t, 140, y + 20, 399, 20) + 12;
+    }
+    g.fillStyle = '#9ca3af'; g.font = '400 10px ' + F; g.fillText('PDF 필기장 · 1', 56, H - 40);
+  });
+  const p2 = await pageImage(g => {
+    g.fillStyle = '#111827'; g.font = '700 20px ' + F; g.fillText('연습 페이지', 56, 80);
+    g.fillStyle = '#6b7280'; g.font = '400 11.5px ' + F; g.fillText('자유롭게 써 보세요. 파란 물결과 빨간 표시, 글상자와 화살표는 예시예요.', 56, 104);
+    g.strokeStyle = '#c9d8f0'; g.lineWidth = 0.8;
+    for (let y = 150; y < H - 60; y += 28) { g.beginPath(); g.moveTo(40, y); g.lineTo(W - 40, y); g.stroke(); }
+    g.strokeStyle = '#f2b8b8'; g.beginPath(); g.moveTo(80, 124); g.lineTo(80, H - 60); g.stroke();
+    g.fillStyle = '#9ca3af'; g.font = '400 10px ' + F; g.fillText('PDF 필기장 · 2', 56, H - 40);
+  });
+  const doc = await PDFLib.PDFDocument.create();
+  for (const buf of [p1, p2]) {
+    const img = await doc.embedPng(buf);
+    doc.addPage([W, H]).drawImage(img, { x: 0, y: 0, width: W, height: H });
+  }
+  doc.setTitle('PDF 필기장 사용 안내');
+  const bytes = await doc.save();
+  const hl = []; for (let x = 54; x <= 312; x += 6) hl.push(x, 104 + Math.sin(x / 40) * 0.6, 0.5);
+  const wave = []; for (let x = 92; x <= 300; x += 3) wave.push(x, 183 + Math.sin(x / 9) * 5, 0.35 + 0.3 * Math.sin(x / 60));
+  const check = [96, 236, 0.3, 102, 244, 0.45, 108, 252, 0.6, 118, 236, 0.6, 130, 218, 0.5, 140, 206, 0.35];
+  const note = { t: 'text', x: 330, y: 226, c: '#1f4fd1', s: 14, text: '여기는 글상자예요\n눌러서 고칠 수 있어요' };
+  Object.assign(note, measureText(note));
+  const ann = {
+    pages: {
+      1: [{ t: 'hl', c: '#ffd400', w: 18, p: hl }],
+      2: [{ t: 'pen', c: '#1f4fd1', w: 1.6, p: wave }, { t: 'pen', c: '#d62828', w: 2, p: check },
+          note, { t: 'shape', k: 'arrow', c: '#d62828', w: 1.6, a: [322, 236, 156, 228] },
+          { t: 'shape', k: 'rect', c: '#1b8a4b', w: 1.4, a: [88, 296, 300, 352] }],
+    },
+    memos: { 1: '예시 메모예요.\n이 칸에 쓴 내용은 1쪽에만 붙어요. 다른 페이지로 넘기면 그 페이지의 메모가 보여요.' },
+  };
+  return { bytes, ann };
+}
+async function openSample() {
+  busy('예시 문서를 준비하는 중…');
+  try {
+    const { bytes, ann } = await makeSample();
+    await openFile(bytes, '사용 안내 (예시).pdf', { key: 'sample-v2', ann });
+  } catch (e) { console.error(e); busy(''); toast('예시 문서를 만들지 못했어요. ‘PDF 열기’로 파일을 열어 주세요.'); }
+}
+$('#showGuide').onclick = () => { $('#pop').hidden = true; openSample(); };
+
+// ---------- start ----------
+(() => {
+  const h = (location.hash || '').slice(1).toLowerCase();
+  if (MODE_NAMES[h]) { prefs.mode = h; savePrefs(); }
+})();
+applyMode(true);
+applyView();
+showMemo();
+
+// installable app: only when served from its own site, never inside the Claude viewer
+const standalone = !(window.claude && window.claude.use) && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
+if (standalone) {
+  const l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.webmanifest'; document.head.appendChild(l);
+  const m = document.createElement('meta'); m.name = 'theme-color'; m.content = '#2f5bd3'; document.head.appendChild(m);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+// PDF opened from the PC file explorer ("연결 프로그램") in the installed app
+if (standalone && 'launchQueue' in window) {
+  window.launchQueue.setConsumer(async params => {
+    const h = params.files && params.files[0]; if (!h) return;
+    const f = await h.getFile();
+    openFile(new Uint8Array(await f.arrayBuffer()), f.name, { remember: true });
+  });
+}
+
+(async () => {
+  try { await document.fonts.load('500 16px "IBM Plex Sans KR"'); } catch (e) {}
+  // PDF shared to the installed app from another Android app ("공유 → PDF 필기장")
+  if (/[?&]shared=1/.test(location.search)) {
+    const sh = await idb.get('shared');
+    history.replaceState(null, '', location.pathname + location.hash);
+    if (sh && sh.bytes) { await idb.del('shared'); await openFile(new Uint8Array(sh.bytes), sh.name || '공유된 문서.pdf', { remember: true }); if (S.pdf) return; }
+  }
+  const rec = (await idb.get('recent')) || [];
+  if (rec.length) {
+    const buf = await idb.get('file:' + rec[0].key);
+    if (buf) { await openFile(new Uint8Array(buf), rec[0].name, { key: rec[0].key }); if (S.pdf) return; }
+  }
+  const last = await idb.get('last');
+  if (last && last.bytes) { await openFile(new Uint8Array(last.bytes), last.name, { key: last.key, remember: true }); if (S.pdf) return; }
+  openSample();
+})();
+})();
+</script>
+
+</body>
+</html>
