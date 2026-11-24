@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#07090c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>속도계</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=Noto+Sans+KR:wght@400;700&display=swap">
+<style>
+/* 계기판 레이아웃: 상단 시계·날짜 / 중앙 원형 게이지+디지털 속도 / 하단 주행정보·버튼 */
+:root{
+  --bg:#07090c; --panel:#10151b; --line:#1e2731; --fg:#e8f0f6; --dim:#7d8b99;
+  --accent:#3fd0ff; --warn:#ffb020; --danger:#ff4d4d;
+  --f-num:"Chakra Petch","Noto Sans KR",ui-monospace,monospace;
+  --f-txt:"Noto Sans KR",system-ui,sans-serif;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);font-family:var(--f-txt);
+  -webkit-user-select:none;user-select:none;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{padding:env(safe-area-inset-top,0px) max(16px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(16px,env(safe-area-inset-left,0px))}
+.app{height:100%;display:flex;flex-direction:column;gap:12px;padding-block:14px;max-width:720px;margin:0 auto;transition:transform .3s}
+body.hud .app{transform:scaleX(-1)}
+body.hud .controls{transform:scaleX(-1)}
+
+.clock{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.time{font-family:var(--f-num);font-weight:700;font-size:clamp(40px,12vw,76px);line-height:1;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.time .sec{font-size:.45em;color:var(--dim);margin-left:4px}
+.time .ampm{font-family:var(--f-txt);font-size:.28em;color:var(--dim);margin-right:6px;vertical-align:top;font-weight:400}
+.date{text-align:right;line-height:1.3}
+.date .ymd{font-size:clamp(15px,4.2vw,22px);color:var(--fg)}
+.date .dow{font-size:clamp(20px,6vw,32px);font-weight:700;color:var(--accent)}
+.date .dow.sun{color:var(--danger)} .date .dow.sat{color:#6ea8ff}
+
+.gauge{flex:1;min-height:0;position:relative;display:grid;place-items:center}
+.gauge svg{width:100%;height:100%;max-width:520px;max-height:100%;overflow:visible}
+.readout{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;padding-top:6%}
+.speed{font-family:var(--f-num);font-weight:700;font-size:clamp(72px,min(30vw,26vh),200px);line-height:.9;font-variant-numeric:tabular-nums;transition:color .3s}
+.speed.over{color:var(--danger)}
+.unit{font-family:var(--f-num);font-size:clamp(16px,4.5vw,24px);color:var(--dim);letter-spacing:.15em;margin-top:4px}
+.gps{margin-top:10px;font-size:13px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--dim)}
+.dot.ok{background:#3ddc84;box-shadow:0 0 8px #3ddc84} .dot.weak{background:var(--warn)} .dot.err{background:var(--danger)}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;text-align:center}
+.stat b{display:block;font-family:var(--f-num);font-size:clamp(18px,5vw,26px);font-variant-numeric:tabular-nums}
+.stat span{font-size:11px;color:var(--dim);letter-spacing:.06em}
+
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+.controls button{flex:1 1 0;min-width:70px;background:var(--panel);color:var(--fg);border:1px solid var(--line);
+  border-radius:10px;padding:11px 6px;font:inherit;font-size:14px;cursor:pointer}
+.controls button:active{background:var(--line)}
+.controls button.on{border-color:var(--accent);color:var(--accent)}
+.controls button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.start{position:fixed;inset:0;background:rgba(7,9,12,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center;z-index:5}
+.start h1{margin:0;font-size:22px}
+.start p{margin:0;color:var(--dim);max-width:34ch;line-height:1.6;font-size:14px}
+.start button{background:var(--accent);color:#04121a;border:0;border-radius:12px;padding:14px 28px;font:inherit;font-weight:700;font-size:17px;cursor:pointer}
+.start .link{background:none;color:var(--dim);font-weight:400;font-size:14px;padding:6px;text-decoration:underline}
+.msg{color:var(--warn)!important}
+
+@media (orientation:landscape) and (max-height:520px){
+  .app{display:grid;grid-template-columns:1fr 1.2fr;grid-template-rows:auto 1fr auto;column-gap:16px}
+  .clock{grid-column:1;flex-direction:column;align-items:flex-start}
+  .date{text-align:left}
+  .gauge{grid-column:2;grid-row:1/4}
+  .stats{grid-column:1;grid-row:2;align-self:end}
+  .controls{grid-column:1;grid-row:3}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="clock">
+    <div class="time" id="time"><span class="ampm" id="ampm"></span><span id="hm">--:--</span><span class="sec" id="sec">--</span></div>
+    <div class="date"><div class="ymd" id="ymd">----년 --월 --일</div><div class="dow" id="dow">-요일</div></div>
+  </header>
+
+  <section class="gauge">
+    <svg viewBox="0 0 400 300" id="svg" aria-hidden="true">
+      <path id="track" fill="none" stroke="#1e2731" stroke-width="18" stroke-linecap="round"/>
+      <path id="bar" fill="none" stroke="url(#grad)" stroke-width="18" stroke-linecap="round"/>
+      <g id="ticks"></g>
+      <defs><linearGradient id="grad" gradientUnits="userSpaceOnUse" x1="40" y1="0" x2="360" y2="0"><stop offset="0" stop-color="#3fd0ff"/><stop offset=".7" stop-color="#3fd0ff"/><stop offset="1" stop-color="#ff4d4d"/></linearGradient></defs>
+    </svg>
+    <div class="readout">
+      <div class="speed" id="speed">0</div>
+      <div class="unit" id="unit">km/h</div>
+      <div class="gps"><i class="dot" id="dot"></i><span id="gpsText">GPS 대기 중</span></div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><b id="max">0</b><span>최고속도</span></div>
+    <div class="stat"><b id="avg">0</b><span>평균속도</span></div>
+    <div class="stat"><b id="dist">0.0</b><span id="distUnit">주행거리 km</span></div>
+  </section>
+
+  <nav class="controls">
+    <button id="btnUnit" type="button">km/h ↔ mph</button>
+    <button id="btnHud" type="button">HUD 반전</button>
+    <button id="btnReset" type="button">기록 초기화</button>
+  </nav>
+</div>
+
+<div class="start" id="start">
+  <h1>GPS 속도계</h1>
+  <p>주행 속도를 재려면 위치 권한이 필요합니다. 운전 중에는 화면을 조작하지 말고 거치대에 고정해 주세요.</p>
+  <button id="btnStart" type="button">시작하기</button>
+  <button id="btnDemo" class="link" type="button">데모로 보기 (GPS 없이)</button>
+  <p id="startMsg" class="msg" hidden></p>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const DOW = ['일','월','화','수','목','금','토'];
+  const store = {
+    get(k, d){ try{ const v = localStorage.getItem('spd.'+k); return v===null?d:JSON.parse(v);}catch{ return d; } },
+    set(k, v){ try{ localStorage.setItem('spd.'+k, JSON.stringify(v)); }catch{} }
+  };
+
+  /* ---------- 시계 ---------- */
+  function tickClock(){
+    const n = new Date(), h = n.getHours();
+    $('ampm').textContent = h < 12 ? '오전' : '오후';
+    const h12 = h % 12 || 12;
+    $('hm').textContent = String(h12).padStart(2,'0') + ':' + String(n.getMinutes()).padStart(2,'0');
+    $('sec').textContent = String(n.getSeconds()).padStart(2,'0');
+    $('ymd').textContent = `${n.getFullYear()}년 ${n.getMonth()+1}월 ${n.getDate()}일`;
+    const d = n.getDay(), el = $('dow');
+    el.textContent = DOW[d] + '요일';
+    el.className = 'dow' + (d===0?' sun':d===6?' sat':'');
+  }
+  tickClock();
+  setInterval(tickClock, 250);
+
+  /* ---------- 게이지 ---------- */
+  const CX=200, CY=200, R=160, A0=-225, A1=45; // 270° 호
+  let mph = store.get('mph', false);
+  const gaugeMax = () => mph ? 120 : 200;
+  const pt = (deg, r) => { const a = deg*Math.PI/180; return [CX + r*Math.cos(a), CY + r*Math.sin(a)]; };
+  const arc = (a, b, r) => { const [x0,y0]=pt(a,r),[x1,y1]=pt(b,r); return `M${x0} ${y0} A${r} ${r} 0 ${b-a>180?1:0} 1 ${x1} ${y1}`; };
+  function drawTicks(){
+    $('track').setAttribute('d', arc(A0, A1, R));
+    const g = $('ticks'); g.innerHTML='';
+    const max = gaugeMax(), step = mph ? 10 : 20;
+    for(let v=0; v<=max; v+=step/2){
+      const a = A0 + (A1-A0)*v/max, major = v % step === 0;
+      const [x0,y0]=pt(a,R-16), [x1,y1]=pt(a,R-(major?30:23));
+      const l = document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1',x0);l.setAttribute('y1',y0);l.setAttribute('x2',x1);l.setAttribute('y2',y1);
+      l.setAttribute('stroke', major?'#7d8b99':'#36424f'); l.setAttribute('stroke-width', major?3:2);
+      g.appendChild(l);
+      if(major){
+        const [tx,ty]=pt(a,R-46), t=document.createElementNS('http://www.w3.org/2000/svg','text');
+        t.setAttribute('x',tx);t.setAttribute('y',ty+5);t.setAttribute('text-anchor','middle');
+        t.setAttribute('fill','#7d8b99');t.setAttribute('font-size','14');t.setAttribute('font-family','Chakra Petch, monospace');
+        t.textContent=v; g.appendChild(t);
+      }
+    }
+  }
+  let shown = 0;
+  function renderSpeed(kmh){
+    const v = mph ? kmh*0.621371 : kmh;
+    shown += (v - shown) * 0.35;          // 부드럽게
+    if (Math.abs(v-shown) < 0.3) shown = v;
+    const disp = Math.round(shown);
+    $('speed').textContent = disp;
+    $('speed').classList.toggle('over', disp >= (mph ? 70 : 110));
+    const f = Math.max(0, Math.min(1, shown / gaugeMax()));
+    const bar = $('bar');
+    if (f < 0.002) bar.removeAttribute('d'); else bar.setAttribute('d', arc(A0, A0 + (A1-A0)*f, R));
+  }
+
+  /* ---------- 주행 기록 ---------- */
+  let speedKmh = 0, maxKmh = store.get('max',0), distKm = store.get('dist',0), movingMs = store.get('moving',0);
+  function renderStats(){
+    const k = mph ? 0.621371 : 1;
+    $('max').textContent = Math.round(maxKmh*k);
+    $('avg').textContent = movingMs > 0 ? Math.round(distKm / (movingMs/3600000) * k) : 0;
+    $('dist').textContent = (distKm*k).toFixed(1);
+    $('distUnit').textContent = '주행거리 ' + (mph ? 'mi' : 'km');
+    $('unit').textContent = mph ? 'mph' : 'km/h';
+  }
+  function saveStats(){ store.set('max',maxKmh); store.set('dist',distKm); store.set('moving',movingMs); }
+
+  function haversine(a, b){
+    const R=6371, toR=Math.PI/180, dLa=(b.latitude-a.latitude)*toR, dLo=(b.longitude-a.longitude)*toR;
+    const s = Math.sin(dLa/2)**2 + Math.cos(a.latitude*toR)*Math.cos(b.latitude*toR)*Math.sin(dLo/2)**2;
+    return 2*R*Math.asin(Math.sqrt(s));
+  }
+
+  let last = null;
+  function onFix(pos){
+    const c = pos.coords, t = pos.timestamp;
+    let kmh = (c.speed != null && !isNaN(c.speed)) ? c.speed * 3.6 : null;
+    if (last){
+      const dt = (t - last.t) / 1000;
+      const dk = haversine(last.c, c);
+      if (kmh == null && dt > 0) kmh = dk / dt * 3600;
+      // 정지 중 GPS 떨림 무시: 일정 속도 이상일 때만 거리 누적
+      if (dt > 0 && dt < 30 && kmh > 3 && c.accuracy < 50){ distKm += dk; movingMs += dt*1000; }
+    }
+    last = { c, t };
+    kmh = kmh == null ? 0 : kmh;
+    if (kmh < 2) kmh = 0;
+    speedKmh = kmh;
+    if (c.accuracy < 50 && kmh > maxKmh && kmh < 400) maxKmh = kmh;
+    const acc = Math.round(c.accuracy);
+    $('dot').className = 'dot ' + (acc <= 20 ? 'ok' : 'weak');
+    $('gpsText').textContent = `GPS 정확도 ±${acc}m`;
+    renderStats(); saveStats();
+  }
+  function onErr(e){
+    $('dot').className = 'dot err';
+    const m = e.code === 1 ? '위치 권한이 거부되었습니다. 브라우저 설정에서 위치를 허용해 주세요.'
+            : e.code === 3 ? 'GPS 신호를 기다리는 중…' : 'GPS 신호를 찾을 수 없습니다.';
+    $('gpsText').textContent = e.code === 1 ? '위치 권한 없음' : 'GPS 신호 없음';
+    if (e.code === 1){ $('start').hidden = false; $('startMsg').hidden = false; $('startMsg').textContent = m; }
+  }
+
+  /* ---------- 화면 켜짐 유지 ---------- */
+  let lock = null;
+  async function keepAwake(){
+    try { if ('wakeLock' in navigator) { lock = await navigator.wakeLock.request('screen'); } } catch {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) keepAwake(); });
+
+  /* ---------- 시작 ---------- */
+  let running = false;
+  function startGps(){
+    if (!('geolocation' in navigator)){ onErr({code:2}); return; }
+    if (!window.isSecureContext){
+      $('startMsg').hidden = false;
+      $('startMsg').textContent = 'GPS는 https 주소에서만 동작합니다. https로 열어 주세요.';
+      return;
+    }
+    $('start').hidden = true; running = true;
+    navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
+    keepAwake();
+  }
+  function startDemo(){
+    $('start').hidden = true; running = true;
+    $('dot').className = 'dot weak'; $('gpsText').textContent = '데모 모드';
+    let t0 = performance.now();
+    setInterval(() => {
+      const s = (performance.now()-t0)/1000;
+      speedKmh = Math.max(0, 70 + 45*Math.sin(s/6) + 8*Math.sin(s*1.3));
+      maxKmh = Math.max(maxKmh, speedKmh); distKm += speedKmh/3600; movingMs += 1000;
+      renderStats();
+    }, 1000);
+  }
+  $('btnStart').onclick = startGps;
+  $('btnDemo').onclick = startDemo;
+
+  /* ---------- 버튼 ---------- */
+  $('btnUnit').onclick = () => { mph = !mph; store.set('mph', mph); shown = mph ? shown*0.621371 : shown/0.621371; drawTicks(); renderStats(); };
+  let hud = store.get('hud', false);
+  const applyHud = () => { document.body.classList.toggle('hud', hud); $('btnHud').classList.toggle('on', hud); };
+  $('btnHud').onclick = () => { hud = !hud; store.set('hud', hud); applyHud(); };
+  let resetArmed = 0;
+  $('btnReset').onclick = (e) => {
+    if (Date.now() - resetArmed > 3000){ resetArmed = Date.now(); e.target.textContent = '한 번 더 누르면 초기화'; setTimeout(()=>{ e.target.textContent='기록 초기화'; }, 3000); return; }
+    maxKmh = 0; distKm = 0; movingMs = 0; resetArmed = 0; e.target.textContent = '초기화됨';
+    setTimeout(()=>{ e.target.textContent='기록 초기화'; }, 1500);
+    saveStats(); renderStats();
+  };
+
+  drawTicks(); applyHud(); renderStats();
+  (function loop(){ renderSpeed(speedKmh); requestAnimationFrame(loop); })();
+})();
+</script>
+</body>
+</html>
