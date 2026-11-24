@@ -1,0 +1,30 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.pilgi.speedometer'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.pilgi.speedometer'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // 웹앱(speedometer/)을 그대로 앱 안에 넣는다
+    sourceSets {
+        main { assets.srcDirs = ['../../speedometer'] }
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.12.1'
+}
