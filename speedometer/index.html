@@ -241,34 +241,67 @@ body.hud .controls{transform:scaleX(-1)}
     return 2*R*Math.asin(Math.sqrt(s));
   }
 
-  let last = null;
-  function onFix(pos){
+  /*
+   * 속도는 GPS 위성 신호(도플러)로 측정한 값을 그대로 쓴다. 이 값이 가장 정확하다.
+   * 그 값이 없을 때만 위치 변화로 계산하는데, 위치는 몇 m씩 튀기 때문에
+   * 최근 3초 이상 구간으로 계산하고, 최근 3개 값의 중앙값을 써서 튀는 값을 버린다.
+   */
+  let last = null, lastFixAt = 0;
+  const trail = [];        // 계산용 최근 위치들
+  const calcHist = [];     // 계산된 속도 최근값
+  const median = a => { const s = [...a].sort((x,y)=>x-y); return s[Math.floor(s.length/2)]; };
+
+  function calcSpeed(c, t){
+    if (c.accuracy > 30) return null;                 // 부정확한 위치로는 계산하지 않음
+    trail.push({ c, t });
+    while (trail.length > 2 && t - trail[0].t > 5000) trail.shift();
+    const first = trail[0], dt = (t - first.t) / 1000;
+    if (dt < 2.5) return null;
+    calcHist.push(haversine(first.c, c) / dt * 3600);
+    if (calcHist.length > 3) calcHist.shift();
+    return median(calcHist);
+  }
+
+  function onFix(pos, source){
     const c = pos.coords, t = pos.timestamp;
-    let kmh = (c.speed != null && !isNaN(c.speed)) ? c.speed * 3.6 : null;
+    const measured = c.speed != null && !isNaN(c.speed);
+    let kmh = measured ? c.speed * 3.6 : calcSpeed(c, t);
+    if (measured){ trail.length = 0; calcHist.length = 0; }
     if (last){
       const dt = (t - last.t) / 1000;
       const dk = haversine(last.c, c);
-      if (kmh == null && dt > 0) kmh = dk / dt * 3600;
+      const v = kmh == null ? speedKmh : kmh;
       // 정지 중 GPS 떨림 무시: 일정 속도 이상일 때만 거리 누적
-      if (dt > 0 && dt < 30 && kmh > 3 && c.accuracy < 50){ distKm += dk; movingMs += dt*1000; }
+      if (dt > 0 && dt < 30 && v > 3 && c.accuracy < 50){ distKm += dk; movingMs += dt*1000; }
     }
-    last = { c, t };
-    kmh = kmh == null ? 0 : kmh;
-    if (kmh < 2) kmh = 0;
-    speedKmh = kmh;
-    if (c.accuracy < 50 && kmh > maxKmh && kmh < 400) maxKmh = kmh;
+    last = { c, t }; lastFixAt = Date.now();
+    if (kmh != null){
+      if (kmh < 2) kmh = 0;
+      speedKmh = kmh;
+      if (c.accuracy < 50 && kmh > maxKmh && kmh < 400) maxKmh = kmh;
+    }
     const acc = Math.round(c.accuracy);
-    $('dot').className = 'dot ' + (acc <= 20 ? 'ok' : 'weak');
-    $('gpsText').textContent = `GPS 정확도 ±${acc}m`;
+    $('dot').className = 'dot ' + (acc <= 20 && measured ? 'ok' : 'weak');
+    $('gpsText').textContent = (measured ? (source === 'gps' ? 'GPS 위성' : 'GPS') : '위치로 계산') + ` · ±${acc}m`;
     renderStats(); saveStats(); updateCalLock();
   }
   function onErr(e){
     $('dot').className = 'dot err';
-    const m = e.code === 1 ? '위치 권한이 거부되었습니다. 브라우저 설정에서 위치를 허용해 주세요.'
+    const m = e.code === 1 ? '위치 권한이 거부되었습니다. 설정에서 위치(정확한 위치)를 허용해 주세요.'
             : e.code === 3 ? 'GPS 신호를 기다리는 중…' : 'GPS 신호를 찾을 수 없습니다.';
-    $('gpsText').textContent = e.code === 1 ? '위치 권한 없음' : 'GPS 신호 없음';
+    $('gpsText').textContent = e.code === 1 ? '위치 권한 없음' : e.code === 4 ? '휴대폰 위치(GPS)가 꺼져 있음' : e.code === 3 ? 'GPS 신호 찾는 중' : 'GPS 신호 없음';
     if (e.code === 1){ $('start').hidden = false; $('startMsg').hidden = false; $('startMsg').textContent = m; }
   }
+  // 앱(안드로이드)에서 GPS 칩 값을 직접 넘겨줄 때 호출된다
+  window.nativeFix = (lat, lon, speed, acc, time) =>
+    onFix({ coords: { latitude: lat, longitude: lon, speed, accuracy: acc }, timestamp: time }, 'gps');
+  window.nativeError = code => onErr({ code });
+  // 터널 등에서 신호가 끊기면 표시
+  setInterval(() => {
+    if (running && !demo && lastFixAt && Date.now() - lastFixAt > 4000){
+      $('dot').className = 'dot err'; $('gpsText').textContent = 'GPS 신호 끊김 (터널?)';
+    }
+  }, 1000);
 
   /* ---------- 화면 켜짐 유지 ---------- */
   let lock = null;
@@ -280,6 +313,12 @@ body.hud .controls{transform:scaleX(-1)}
   /* ---------- 시작 ---------- */
   let running = false;
   function startGps(){
+    if (window.AndroidGps){                 // 설치형 앱: GPS 칩에서 직접 받기
+      $('start').hidden = true; running = true;
+      $('gpsText').textContent = 'GPS 신호 찾는 중';
+      window.AndroidGps.start();
+      return;
+    }
     if (!('geolocation' in navigator)){ onErr({code:2}); return; }
     if (!window.isSecureContext){
       $('startMsg').hidden = false;
